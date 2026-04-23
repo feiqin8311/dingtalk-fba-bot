@@ -1,0 +1,15 @@
+services:
+  fba-alert:
+    build:
+      context: .
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_EXTRA_INDEX_URL: ${PIP_EXTRA_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_FALLBACK_INDEX_URL: ${PIP_FALLBACK_INDEX_URL:-https://pypi.org/simple}
+    image: dingtalk-fba-bot:latest
+    container_name: dingtalk-fba-bot
+    env_file:
+      - .env
+    working_dir: /app
+    restart: unless-stopped
+    command: ["python", "-m", "fba_alert.main", "--schedule"]

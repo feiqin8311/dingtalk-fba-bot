@@ -1,0 +1,6 @@
+aiohttp
+orjson
+pycryptodome
+openpyxl
+apscheduler
+# optional: aiohttp_socks
