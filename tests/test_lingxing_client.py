@@ -3,7 +3,7 @@ import tempfile
 import unittest
 
 from fba_alert.config import LingxingConfig
-from fba_alert.lingxing import InventorySnapshot, LingxingClient, SourceListRateLimitError
+from fba_alert.lingxing import InventorySnapshot, LingxingClient, ListingRateLimitError, SourceListRateLimitError
 
 
 def make_config() -> LingxingConfig:
@@ -202,16 +202,17 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
             nonlocal current_in_flight, max_in_flight
             current_in_flight += 1
             max_in_flight = max(max_in_flight, current_in_flight)
-            await asyncio.sleep(0.01)
-            if current_in_flight > 1:
+            try:
+                await asyncio.sleep(0.01)
+                if current_in_flight > 1:
+                    raise SourceListRateLimitError(
+                        {"code": "3001008", "msg": "new requests too frequently. please request later.", "data": None}
+                    )
+                if source_type == "1":
+                    return [{"remark": {"afn_fulfillable_quantity": 1, "reserved_fc_transfers": 2, "reserved_fc_processing": 3}}]
+                return [{"quantity": 4}]
+            finally:
                 current_in_flight -= 1
-                raise SourceListRateLimitError(
-                    {"code": "3001008", "msg": "new requests too frequently. please request later.", "data": None}
-                )
-            current_in_flight -= 1
-            if source_type == "1":
-                return [{"remark": {"afn_fulfillable_quantity": 1, "reserved_fc_transfers": 2, "reserved_fc_processing": 3}}]
-            return [{"quantity": 4}]
 
         client.fetch_source_list = fake_fetch_source_list  # type: ignore[method-assign]
 
@@ -253,6 +254,72 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(rows), 25)
         self.assertGreater(max_in_flight, 1)
+
+    async def test_fetch_inventory_snapshot_map_cancels_pending_tasks_before_retrying(self) -> None:
+        client = LingxingClient(make_config())
+        first_round_failed = False
+        cancelled_pairs: list[str] = []
+
+        async def fake_fetch_pair(
+            access_token: str,
+            sid: str,
+            asin: str,
+            semaphore: asyncio.Semaphore,
+        ) -> tuple[tuple[str, str], InventorySnapshot]:
+            nonlocal first_round_failed
+            async with semaphore:
+                try:
+                    if asin == "A1" and not first_round_failed:
+                        first_round_failed = True
+                        raise SourceListRateLimitError(
+                            {"code": "3001008", "msg": "new requests too frequently. please request later.", "data": None}
+                        )
+                    await asyncio.sleep(0.05)
+                    return (sid, asin), InventorySnapshot(1, 2, 3, 6, 4)
+                except asyncio.CancelledError:
+                    cancelled_pairs.append(asin)
+                    raise
+
+        client._fetch_inventory_snapshot_pair = fake_fetch_pair  # type: ignore[method-assign]
+
+        snapshot_map = await client.fetch_inventory_snapshot_map("token", {"1448": {"A1", "A2"}})
+
+        self.assertEqual(set(snapshot_map), {("1448", "A1"), ("1448", "A2")})
+        self.assertIn("A2", cancelled_pairs)
+
+    async def test_fetch_listing_items_by_asins_cancels_pending_batches_before_retrying(self) -> None:
+        client = LingxingClient(make_config())
+        first_round_failed = False
+        cancelled_batches: list[tuple[str, ...]] = []
+
+        async def fake_fetch_listing_batch(
+            access_token: str,
+            sid: str,
+            search_values: list[str],
+            batch_no: int,
+            semaphore: asyncio.Semaphore,
+        ) -> list[dict]:
+            nonlocal first_round_failed
+            batch_key = tuple(search_values)
+            async with semaphore:
+                try:
+                    if batch_no == 1 and not first_round_failed:
+                        first_round_failed = True
+                        raise ListingRateLimitError(
+                            {"code": "3001008", "msg": "new requests too frequently. please request later.", "data": None}
+                        )
+                    await asyncio.sleep(0.05)
+                    return [{"asin": asin} for asin in search_values]
+                except asyncio.CancelledError:
+                    cancelled_batches.append(batch_key)
+                    raise
+
+        client._fetch_listing_batch = fake_fetch_listing_batch  # type: ignore[method-assign]
+
+        rows = await client.fetch_listing_items_by_asins("token", {"1448": {f"A{i}" for i in range(12)}})
+
+        self.assertEqual(len(rows), 12)
+        self.assertTrue(cancelled_batches)
 
     async def test_fetch_listing_items_by_asins_retries_rate_limited_batches(self) -> None:
         client = LingxingClient(make_config())

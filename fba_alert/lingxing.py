@@ -358,7 +358,7 @@ class LingxingClient:
                         tasks.append(self._fetch_listing_batch(access_token, sid, search_values, index // 10 + 1, semaphore))
             try:
                 all_rows: list[dict] = []
-                for rows in await asyncio.gather(*tasks):
+                for rows in await self._gather_with_cancellation(tasks):
                     all_rows.extend(rows)
                 print(f"[lingxing] Listing 拉取完成: total_rows={len(all_rows)}")
                 return all_rows
@@ -483,6 +483,17 @@ class LingxingClient:
             levels.append(1)
         return levels
 
+    async def _gather_with_cancellation(self, coroutines: list[Any]) -> list[Any]:
+        tasks = [asyncio.create_task(coro) for coro in coroutines]
+        try:
+            return await asyncio.gather(*tasks)
+        except Exception:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+
     async def fetch_inventory_snapshot_map(self, access_token: str, sid_asin_map: dict[str, set[str]]) -> dict[tuple[str, str], InventorySnapshot]:
         last_error: Optional[SourceListRateLimitError] = None
         for concurrency in self._source_list_concurrency_levels():
@@ -492,7 +503,7 @@ class LingxingClient:
                 for asin in sorted(asin for asin in asin_set if asin):
                     tasks.append(self._fetch_inventory_snapshot_pair(access_token, sid, asin, semaphore))
             try:
-                snapshot_map = dict(await asyncio.gather(*tasks))
+                snapshot_map = dict(await self._gather_with_cancellation(tasks))
                 print(f"[lingxing] SourceList 库存汇总完成: total_pairs={len(snapshot_map)}")
                 return snapshot_map
             except SourceListRateLimitError as exc:

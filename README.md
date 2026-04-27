@@ -143,18 +143,18 @@ docker exec -it dingtalk-fba-bot python -m fba_alert.main
 
 ### 3. 服务器定时执行
 
-如果你已经用 `docker compose up -d --build` 启动了容器，就不需要再额外配宿主机 `cron`，容器会自己按每周一 09:30 执行。
+如果你已经用 `docker compose up -d --build` 启动了容器，就不需要再额外配宿主机 `cron`，容器会自己按每周一 09:00 执行。
 
 如果你不想让容器常驻，也可以继续使用宿主机 `cron` 定时拉起一次容器：
 
 ```cron
-30 9 * * 1 cd /path/to/dingtalk-fba-bot && /usr/bin/docker compose run --rm fba-alert python -m fba_alert.main >> logs/fba_alert.log 2>&1
+0 9 * * 1 cd /path/to/dingtalk-fba-bot && /usr/bin/docker compose run --rm fba-alert python -m fba_alert.main >> logs/fba_alert.log 2>&1
 ```
 
 如果你不用 `docker compose`，也可以直接写成：
 
 ```cron
-30 9 * * 1 cd /path/to/dingtalk-fba-bot && /usr/bin/docker run --rm --env-file .env dingtalk-fba-bot:latest python -m fba_alert.main >> logs/fba_alert.log 2>&1
+0 9 * * 1 cd /path/to/dingtalk-fba-bot && /usr/bin/docker run --rm --env-file .env dingtalk-fba-bot:latest python -m fba_alert.main >> logs/fba_alert.log 2>&1
 ```
 
 ## 规则口径
@@ -229,10 +229,10 @@ C级提醒满足：
 
 ## 定时执行
 
-服务器上建议用 `cron` 每周一 09:30 运行：
+服务器上建议用 `cron` 每周一 09:00 运行：
 
 ```cron
-30 9 * * 1 cd /path/to/dingtalk-fba-bot && /path/to/conda/env/bin/python -m fba_alert.main >> logs/fba_alert.log 2>&1
+0 9 * * 1 cd /path/to/dingtalk-fba-bot && /path/to/conda/env/bin/python -m fba_alert.main >> logs/fba_alert.log 2>&1
 ```
 
 如果走 `docker compose up -d --build`，优先使用容器内调度，不需要再叠加宿主机 `cron`。

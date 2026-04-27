@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-file", default=".env", help="env 文件路径，默认 .env")
     parser.add_argument("--dry-run", action="store_true", help="只打印结果，不发送钉钉")
     parser.add_argument("--today", default="", help="手动指定今天日期，格式 YYYY-MM-DD")
-    parser.add_argument("--schedule", action="store_true", help="常驻运行，每周一 09:30 自动执行")
+    parser.add_argument("--schedule", action="store_true", help="常驻运行，每周一 09:00 自动执行")
     parser.add_argument(
         "--scope",
         default="all",
@@ -61,14 +61,14 @@ async def scheduler_main(args: argparse.Namespace) -> int:
         trigger="cron",
         day_of_week="mon",
         hour=9,
-        minute=30,
+        minute=0,
         id="weekly_libraton_stock_alert",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
     )
     scheduler.start()
-    print(f"[scheduler] 已启动，每周一 09:30 执行，时区={config.timezone}")
+    print(f"[scheduler] 已启动，每周一 09:00 执行，时区={config.timezone}")
     await asyncio.Event().wait()
     return 0
 

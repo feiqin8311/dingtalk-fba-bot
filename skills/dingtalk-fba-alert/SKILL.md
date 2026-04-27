@@ -1,6 +1,6 @@
 ---
 name: dingtalk-fba-alert
-description: Use when the user wants an AI to trigger the DingTalk FBA inventory alert workflow in this repository from a natural-language command, including dry-run checks, one-shot live sends, or scope-specific Libraton alerts.
+description: Use when the user wants an AI to trigger the DingTalk FBA inventory alert workflow in this repository from a natural-language command, including dry-run checks and one-shot live sends for the main Libraton inventory alert.
 ---
 
 # Dingtalk FBA Alert
@@ -18,7 +18,6 @@ For conversational AI usage, prefer run once / one-shot execution. Do not start 
 - triggering the inventory alert workflow from a natural-language command
 - generating the Excel warning report with `--dry-run`
 - performing a one-shot live send through the project's own DingTalk logic
-- handling scope-specific Libraton alert requests such as US, CA, JP, and EU
 - operating the repo from a local checkout
 
 ## Do Not Use This Skill For
@@ -54,19 +53,15 @@ bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh
 
 This project already knows how to generate the report and send the correct files to the configured recipients.
 
-## Supported Scope Phrases
+## Supported Trigger Phrase
 
-Use these fixed mappings when the user asks for a specific Libraton inventory alert:
+Use this fixed mapping for the natural-language trigger:
 
 - `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all`
-- `LIBRATON库存美国预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope us`
-- `LIBRATON库存加拿大预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope ca`
-- `LIBRATON库存日本预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope jp`
-- `LIBRATON库存欧洲预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope eu`
 
 If the user explicitly asks to test only, prepend `--dry-run` to the mapped command.
 
-Do not invent extra aliases or fuzzy matches. If the user asks for another country, explain that only `总表/美国/加拿大/日本/欧洲` are supported.
+Do not invent extra aliases or fuzzy matches. If the user asks for country-specific Libraton alerts, tell them this skill no longer exposes country trigger phrases and that scoped runs must be invoked explicitly by command.
 
 ## Delivery Rule
 

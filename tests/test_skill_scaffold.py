@@ -12,6 +12,13 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertTrue((SKILL_ROOT / "scripts" / "run-fba-alert.sh").exists())
         self.assertTrue((SKILL_ROOT / "references" / "config.md").exists())
 
+    def test_skill_runner_uses_dingtalk_bot_conda_env(self) -> None:
+        runner_text = (SKILL_ROOT / "scripts" / "run-fba-alert.sh").read_text(encoding="utf-8")
+
+        self.assertIn("conda", runner_text)
+        self.assertIn("run -n dingtalk-bot", runner_text)
+        self.assertIn("python -m fba_alert.main", runner_text)
+
     def test_skill_instructions_do_not_expose_scheduler_mode(self) -> None:
         skill_text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         reference_text = (SKILL_ROOT / "references" / "config.md").read_text(encoding="utf-8")
@@ -29,15 +36,16 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertIn("do not use the live dingtalk send path", skill_text_lower)
         self.assertIn("OpenClaw sends the final message", reference_text)
 
-    def test_skill_documents_supported_scope_phrases(self) -> None:
+    def test_skill_only_documents_main_trigger_phrase(self) -> None:
         skill_text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
         reference_text = (SKILL_ROOT / "references" / "config.md").read_text(encoding="utf-8")
 
-        self.assertIn("LIBRATON库存美国预警", skill_text)
-        self.assertIn("LIBRATON库存加拿大预警", skill_text)
-        self.assertIn("LIBRATON库存日本预警", skill_text)
-        self.assertIn("LIBRATON库存欧洲预警", skill_text)
-        self.assertIn("--scope us", skill_text)
+        self.assertIn("LIBRATON库存预警", skill_text)
+        self.assertNotIn("LIBRATON库存美国预警", skill_text)
+        self.assertNotIn("LIBRATON库存加拿大预警", skill_text)
+        self.assertNotIn("LIBRATON库存日本预警", skill_text)
+        self.assertNotIn("LIBRATON库存欧洲预警", skill_text)
+        self.assertIn("--scope all", skill_text)
         self.assertIn("--scope eu", reference_text)
 
 
