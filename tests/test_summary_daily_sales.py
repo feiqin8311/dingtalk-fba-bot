@@ -293,6 +293,40 @@ class SummaryDailySalesTests(unittest.TestCase):
         self.assertEqual(record.fba_transfer_reserved_inventory, 4)
         self.assertEqual(record.fba_processing_inventory, 3)
 
+    def test_classify_record_prioritizes_c_level_over_a_level(self) -> None:
+        item = {
+            "basic_info": {
+                "asin": "B001-CA",
+                "hash_id": "hash-c-over-a",
+                "sid": "1448",
+                "node_type": 1,
+                "msku_fnsku_list": [{"msku": "MSKU-C-OVER-A"}],
+            },
+            "suggest_info": {
+                "fba_available_sale_days": 30,
+                "available_sale_days_fba": 10,
+                "out_stock_date": "2026-05-10",
+                "estimated_sale_avg_quantity": 1.23,
+            },
+            "data": {
+                "amazon_quantity_info": {
+                    "amazon_quantity_valid": 0,
+                    "amazon_quantity_shipping": 18,
+                    "afn_fulfillable_quantity": 0,
+                    "reserved_fc_transfers": 0,
+                    "reserved_fc_processing": 0,
+                }
+            },
+            "ext_info": {"restock_status": 0},
+        }
+
+        record = classify_record(item, date(2026, 4, 7), {"1448": "店铺A"}, {"1448"})
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.level, "C")
+        self.assertEqual(record.reasons, ["FBA库存=0 且 FBA在途=18"])
+
     def test_aggregate_inventory_snapshot_sums_type_1_and_type_2_values(self) -> None:
         type_1_rows = [
             {

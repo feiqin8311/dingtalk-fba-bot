@@ -104,30 +104,31 @@ def classify_record(
 
     level = ""
     reasons: list[str] = []
-    if thresholds["a_fba_days"] is not None and 0 < fba_days <= thresholds["a_fba_days"]:
-        reasons.append(f"可售天数(FBA)={fba_days}天")
-    if thresholds["a_fba_plus_days"] is not None and 0 < fba_plus_days <= thresholds["a_fba_plus_days"]:
-        reasons.append(f"可售天数(FBA+在途)={fba_plus_days}天")
-    if thresholds["a_out_stock_days"] is not None and 0 < out_stock_days <= thresholds["a_out_stock_days"]:
-        reasons.append(f"断货时间(天数)={out_stock_days}天")
-    if reasons:
-        level = "A"
+    if fba_inventory == 0 and fba_inbound_inventory > 0:
+        level = "C"
+        reasons.append(f"FBA库存=0 且 FBA在途={fba_inbound_inventory}")
     else:
-        if thresholds["b_fba_days"] is not None and 0 < fba_days <= thresholds["b_fba_days"]:
+        if thresholds["a_fba_days"] is not None and 0 < fba_days <= thresholds["a_fba_days"]:
             reasons.append(f"可售天数(FBA)={fba_days}天")
-        if (
-            thresholds["b_equal_out_stock_days"] is not None
-            and 0 < fba_days <= thresholds["b_equal_out_stock_days"]
-            and fba_days == out_stock_days
-        ):
-            reasons.append(f"可售天数(FBA)=断货时间(天数)={fba_days}天")
-        if thresholds["b_fba_plus_days"] is not None and 0 < fba_plus_days <= thresholds["b_fba_plus_days"]:
+        if thresholds["a_fba_plus_days"] is not None and 0 < fba_plus_days <= thresholds["a_fba_plus_days"]:
             reasons.append(f"可售天数(FBA+在途)={fba_plus_days}天")
+        if thresholds["a_out_stock_days"] is not None and 0 < out_stock_days <= thresholds["a_out_stock_days"]:
+            reasons.append(f"断货时间(天数)={out_stock_days}天")
         if reasons:
-            level = "B"
-        elif fba_inventory == 0 and fba_inbound_inventory > 0:
-            level = "C"
-            reasons.append(f"FBA库存=0 且 FBA在途={fba_inbound_inventory}")
+            level = "A"
+        else:
+            if thresholds["b_fba_days"] is not None and 0 < fba_days <= thresholds["b_fba_days"]:
+                reasons.append(f"可售天数(FBA)={fba_days}天")
+            if (
+                thresholds["b_equal_out_stock_days"] is not None
+                and 0 < fba_days <= thresholds["b_equal_out_stock_days"]
+                and fba_days == out_stock_days
+            ):
+                reasons.append(f"可售天数(FBA)=断货时间(天数)={fba_days}天")
+            if thresholds["b_fba_plus_days"] is not None and 0 < fba_plus_days <= thresholds["b_fba_plus_days"]:
+                reasons.append(f"可售天数(FBA+在途)={fba_plus_days}天")
+            if reasons:
+                level = "B"
 
     if not level:
         return None

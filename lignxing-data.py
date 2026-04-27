@@ -68,23 +68,23 @@ async def main() -> None:
     config = load_config()
     sid_list = args.sid or config.lingxing.sid_list
 
-    client = LingxingClient(config.lingxing)
-    access_token = await client.fetch_access_token()
-    req_body = {
-        "sid_list": sid_list,
-        "data_type": config.lingxing.data_type,
-        "mode": config.lingxing.mode,
-        "offset": max(args.offset, 0),
-        "length": max(args.length, 1),
-    }
+    async with LingxingClient(config.lingxing) as client:
+        access_token = await client.fetch_access_token()
+        req_body = {
+            "sid_list": sid_list,
+            "data_type": config.lingxing.data_type,
+            "mode": config.lingxing.mode,
+            "offset": max(args.offset, 0),
+            "length": max(args.length, 1),
+        }
 
-    print(f"[debug] request_body={json.dumps(req_body, ensure_ascii=False)}")
-    response = await client.request(
-        access_token,
-        "/erp/sc/routing/restocking/analysis/getSummaryList",
-        "POST",
-        req_body=req_body,
-    )
+        print(f"[debug] request_body={json.dumps(req_body, ensure_ascii=False)}")
+        response = await client.request(
+            access_token,
+            "/erp/sc/routing/restocking/analysis/getSummaryList",
+            "POST",
+            req_body=req_body,
+        )
 
     items = response.get("data") or []
 

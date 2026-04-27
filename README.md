@@ -39,7 +39,7 @@ cp .env.example .env
   - 程序会额外通过店铺接口自动补入 `Libraton JP-JP` 和 `Libraton NA-CA` 对应的店铺 ID，用于应用其专属预警规则
 - `LINGXING_MODE`: 补货建议模式，默认 `0`
 - `LINGXING_LISTING_CONCURRENCY`: Listing 并发数，默认 `2`
-- `LINGXING_SOURCE_LIST_CONCURRENCY`: SourceList 并发数，默认 `4`
+- `LINGXING_SOURCE_LIST_CONCURRENCY`: SourceList 初始并发数，默认 `4`；命中领星限流后程序会自动降到更低并发重试
 - `LINGXING_SOURCE_LIST_CACHE_ENABLED`: 是否启用 SourceList 本地缓存，默认 `true`
 - `LINGXING_SOURCE_LIST_CACHE_DIR`: SourceList 本地缓存目录，默认 `.cache/fba_alert/source_list`
 - `DINGTALK_APP_KEY`

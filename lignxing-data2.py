@@ -59,19 +59,19 @@ async def main() -> None:
     load_env_file(args.env_file)
     config = load_config()
 
-    client = LingxingClient(config.lingxing)
-    access_token = await client.fetch_access_token()
-    req_body = {
-        "date": args.date,
-    }
+    async with LingxingClient(config.lingxing) as client:
+        access_token = await client.fetch_access_token()
+        req_body = {
+            "date": args.date,
+        }
 
-    print(f"[debug] request_body={json.dumps(req_body, ensure_ascii=False)}")
-    response = await client.request(
-        access_token,
-        "/erp/sc/routing/finance/currency/currencyMonth",
-        "POST",
-        req_body=req_body,
-    )
+        print(f"[debug] request_body={json.dumps(req_body, ensure_ascii=False)}")
+        response = await client.request(
+            access_token,
+            "/erp/sc/routing/finance/currency/currencyMonth",
+            "POST",
+            req_body=req_body,
+        )
 
     print(
         json.dumps(

@@ -35,6 +35,18 @@ class InventorySnapshot:
     fba_inbound_inventory: int
 
 
+class SourceListRateLimitError(RuntimeError):
+    def __init__(self, resp: dict):
+        super().__init__(f"SourceList 接口返回失败: {resp}")
+        self.resp = resp
+
+
+class ListingRateLimitError(RuntimeError):
+    def __init__(self, resp: dict):
+        super().__init__(f"Listing 接口返回失败: {resp}")
+        self.resp = resp
+
+
 def aggregate_inventory_snapshot(type_1_rows: list[dict], type_2_rows: list[dict]) -> InventorySnapshot:
     fba_sellable_inventory = 0
     fba_transfer_reserved_inventory = 0
@@ -191,6 +203,12 @@ class LingxingClient:
         self.request_kwargs = {} if config.ssl_verify else {"ssl": False}
         self._source_list_cache: dict[tuple[str, str, str], list[dict]] = {}
 
+    async def __aenter__(self) -> "LingxingClient":
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.close()
+
     async def close(self) -> None:
         await self.http.close()
 
@@ -328,20 +346,32 @@ class LingxingClient:
         return all_rows
 
     async def fetch_listing_items_by_asins(self, access_token: str, sid_asin_map: dict[str, set[str]]) -> list[dict]:
-        semaphore = asyncio.Semaphore(self.config.listing_concurrency)
-        tasks = []
-        for sid, asin_set in sid_asin_map.items():
-            asins = sorted(asin for asin in asin_set if asin)
-            for index in range(0, len(asins), 10):
-                search_values = asins[index : index + 10]
-                if search_values:
-                    tasks.append(self._fetch_listing_batch(access_token, sid, search_values, index // 10 + 1, semaphore))
-
-        all_rows: list[dict] = []
-        for rows in await asyncio.gather(*tasks):
-            all_rows.extend(rows)
-        print(f"[lingxing] Listing 拉取完成: total_rows={len(all_rows)}")
-        return all_rows
+        last_error: Optional[ListingRateLimitError] = None
+        for concurrency in self._listing_concurrency_levels():
+            semaphore = asyncio.Semaphore(concurrency)
+            tasks = []
+            for sid, asin_set in sid_asin_map.items():
+                asins = sorted(asin for asin in asin_set if asin)
+                for index in range(0, len(asins), 10):
+                    search_values = asins[index : index + 10]
+                    if search_values:
+                        tasks.append(self._fetch_listing_batch(access_token, sid, search_values, index // 10 + 1, semaphore))
+            try:
+                all_rows: list[dict] = []
+                for rows in await asyncio.gather(*tasks):
+                    all_rows.extend(rows)
+                print(f"[lingxing] Listing 拉取完成: total_rows={len(all_rows)}")
+                return all_rows
+            except ListingRateLimitError as exc:
+                last_error = exc
+                if concurrency <= 1:
+                    break
+                print(f"[lingxing] Listing 遇到限流，降低并发后重试: concurrency={concurrency} -> next")
+                await asyncio.sleep(1)
+        if last_error is not None:
+            raise last_error
+        print("[lingxing] Listing 拉取完成: total_rows=0")
+        return []
 
     async def _fetch_listing_batch(
         self,
@@ -374,6 +404,8 @@ class LingxingClient:
                 )
                 resp = await self.request_with_rate_limit_retry(access_token, LISTING_ROUTE, "POST", req_body=req_body)
                 if safe_int(resp.get("code")) != 0:
+                    if is_rate_limited_response(resp):
+                        raise ListingRateLimitError(resp)
                     raise RuntimeError(f"Listing 接口返回失败: {resp}")
                 data = resp.get("data") or []
                 total = safe_int(resp.get("total"))
@@ -400,6 +432,8 @@ class LingxingClient:
         print(f"[lingxing] 拉取 SourceList: sid={sid} asin={asin} type={source_type}")
         resp = await self.request_with_rate_limit_retry(access_token, SOURCE_LIST_ROUTE, "POST", req_body=req_body)
         if safe_int(resp.get("code")) != 0:
+            if is_source_list_rate_limited_response(resp):
+                raise SourceListRateLimitError(resp)
             raise RuntimeError(f"SourceList 接口返回失败: {resp}")
         data = resp.get("data") or {}
         rows = data.get("source_list") or []
@@ -433,16 +467,44 @@ class LingxingClient:
         file_name = f"{sid}-{asin}-{source_type}-mode{self.config.mode}.json"
         return Path(self.config.source_list_cache_dir) / cache_date / file_name
 
-    async def fetch_inventory_snapshot_map(self, access_token: str, sid_asin_map: dict[str, set[str]]) -> dict[tuple[str, str], InventorySnapshot]:
-        semaphore = asyncio.Semaphore(self.config.source_list_concurrency)
-        tasks = []
-        for sid, asin_set in sid_asin_map.items():
-            for asin in sorted(asin for asin in asin_set if asin):
-                tasks.append(self._fetch_inventory_snapshot_pair(access_token, sid, asin, semaphore))
+    def _source_list_concurrency_levels(self) -> list[int]:
+        levels = [self.config.source_list_concurrency]
+        if self.config.source_list_concurrency > 2:
+            levels.append(2)
+        if self.config.source_list_concurrency > 1:
+            levels.append(1)
+        return levels
 
-        snapshot_map = dict(await asyncio.gather(*tasks))
-        print(f"[lingxing] SourceList 库存汇总完成: total_pairs={len(snapshot_map)}")
-        return snapshot_map
+    def _listing_concurrency_levels(self) -> list[int]:
+        levels = [self.config.listing_concurrency]
+        if self.config.listing_concurrency > 2:
+            levels.append(2)
+        if self.config.listing_concurrency > 1:
+            levels.append(1)
+        return levels
+
+    async def fetch_inventory_snapshot_map(self, access_token: str, sid_asin_map: dict[str, set[str]]) -> dict[tuple[str, str], InventorySnapshot]:
+        last_error: Optional[SourceListRateLimitError] = None
+        for concurrency in self._source_list_concurrency_levels():
+            semaphore = asyncio.Semaphore(concurrency)
+            tasks = []
+            for sid, asin_set in sid_asin_map.items():
+                for asin in sorted(asin for asin in asin_set if asin):
+                    tasks.append(self._fetch_inventory_snapshot_pair(access_token, sid, asin, semaphore))
+            try:
+                snapshot_map = dict(await asyncio.gather(*tasks))
+                print(f"[lingxing] SourceList 库存汇总完成: total_pairs={len(snapshot_map)}")
+                return snapshot_map
+            except SourceListRateLimitError as exc:
+                last_error = exc
+                if concurrency <= 1:
+                    break
+                print(f"[lingxing] SourceList 遇到限流，降低并发后重试: concurrency={concurrency} -> next")
+                await asyncio.sleep(1)
+        if last_error is not None:
+            raise last_error
+        print("[lingxing] SourceList 库存汇总完成: total_pairs=0")
+        return {}
 
     async def _fetch_inventory_snapshot_pair(
         self,
@@ -452,8 +514,6 @@ class LingxingClient:
         semaphore: asyncio.Semaphore,
     ) -> tuple[tuple[str, str], InventorySnapshot]:
         async with semaphore:
-            type_1_rows, type_2_rows = await asyncio.gather(
-                self.fetch_source_list(access_token, sid, asin, "1"),
-                self.fetch_source_list(access_token, sid, asin, "2"),
-            )
+            type_1_rows = await self.fetch_source_list(access_token, sid, asin, "1")
+            type_2_rows = await self.fetch_source_list(access_token, sid, asin, "2")
         return (sid, asin), aggregate_inventory_snapshot(type_1_rows, type_2_rows)
