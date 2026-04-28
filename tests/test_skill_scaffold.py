@@ -14,11 +14,17 @@ class SkillScaffoldTests(unittest.TestCase):
 
     def test_skill_runner_execs_dingtalk_bot_env_python(self) -> None:
         runner_text = (SKILL_ROOT / "scripts" / "run-fba-alert.sh").read_text(encoding="utf-8")
+        machine_path = "/".join(["", "home", "yida"])
 
-        self.assertIn("python_bin=", runner_text)
-        self.assertIn("/envs/dingtalk-bot/bin/python", runner_text)
+        self.assertIn('python_bin="${DINGTALK_FBA_BOT_PYTHON:-}"', runner_text)
+        self.assertIn('conda_env_name="${DINGTALK_FBA_BOT_CONDA_ENV:-dingtalk-bot}"', runner_text)
+        self.assertIn('VIRTUAL_ENV', runner_text)
+        self.assertIn('conda info --base', runner_text)
+        self.assertIn('command -v python3', runner_text)
+        self.assertIn('command -v python', runner_text)
         self.assertIn('exec env \\', runner_text)
         self.assertIn('  "${python_bin}" -m fba_alert.main "$@"', runner_text)
+        self.assertNotIn(machine_path, runner_text)
 
     def test_skill_instructions_do_not_expose_scheduler_mode(self) -> None:
         skill_text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
@@ -57,23 +63,13 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertIn("--scope all", skill_text)
         self.assertIn("--scope eu", reference_text)
 
-    def test_skill_documents_japan_scoped_trigger_for_ops_wrapper(self) -> None:
-        ops_skill_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/SKILL.md").read_text(encoding="utf-8")
-        ops_soul_text = Path("/home/yida/.openclaw/workspace-ops/SOUL.md").read_text(encoding="utf-8")
-        ops_reference_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/references/config.md").read_text(encoding="utf-8")
+    def test_repo_tests_do_not_depend_on_machine_specific_paths(self) -> None:
+        test_text = Path(__file__).read_text(encoding="utf-8")
+        machine_path = "/".join(["", "home", "yida"])
+        ops_path = "workspace" + "-ops"
 
-        self.assertIn("5. LIBRATON库存预警-日本", ops_skill_text)
-        self.assertIn("5. LIBRATON库存预警-日本", ops_soul_text)
-        self.assertIn("LIBRATON库存预警-日本", ops_reference_text)
-        self.assertIn("--scope jp", ops_skill_text)
-        self.assertIn("--scope jp", ops_reference_text)
-
-    def test_ops_wrapper_rejects_live_send_without_notify_override(self) -> None:
-        ops_runner_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/scripts/run-fba-alert.sh").read_text(encoding="utf-8")
-
-        self.assertIn("--notify-user-id", ops_runner_text)
-        self.assertIn("--dry-run", ops_runner_text)
-        self.assertIn("OpenClaw live send requires --notify-user-id", ops_runner_text)
+        self.assertNotIn(machine_path, test_text)
+        self.assertNotIn(ops_path, test_text)
 
 
 if __name__ == "__main__":
