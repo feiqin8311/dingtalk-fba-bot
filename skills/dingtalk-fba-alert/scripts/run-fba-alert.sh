@@ -3,6 +3,35 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
+env_file="${repo_root}/.env"
+had_python_override=0
+had_conda_env_override=0
+original_python_override="${DINGTALK_FBA_BOT_PYTHON:-}"
+original_conda_env_override="${DINGTALK_FBA_BOT_CONDA_ENV:-}"
+
+if [[ -n "${DINGTALK_FBA_BOT_PYTHON:-}" ]]; then
+  had_python_override=1
+fi
+
+if [[ -n "${DINGTALK_FBA_BOT_CONDA_ENV:-}" ]]; then
+  had_conda_env_override=1
+fi
+
+if [[ -f "${env_file}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${env_file}"
+  set +a
+fi
+
+if [[ "${had_python_override}" -eq 1 ]]; then
+  export DINGTALK_FBA_BOT_PYTHON="${original_python_override}"
+fi
+
+if [[ "${had_conda_env_override}" -eq 1 ]]; then
+  export DINGTALK_FBA_BOT_CONDA_ENV="${original_conda_env_override}"
+fi
+
 python_bin="${DINGTALK_FBA_BOT_PYTHON:-}"
 conda_env_name="${DINGTALK_FBA_BOT_CONDA_ENV:-dingtalk-bot}"
 
