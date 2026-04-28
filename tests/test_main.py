@@ -66,5 +66,20 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["kwargs"]["minute"], 0)
 
 
+class ParseArgsTests(unittest.TestCase):
+    def test_parse_args_reads_notify_user_id_override(self) -> None:
+        from fba_alert.main import parse_args
+
+        with patch.object(
+            sys,
+            "argv",
+            ["prog", "--scope", "us", "--notify-user-id", "user-1", "--notify-user-id", "user-2"],
+        ):
+            args = parse_args()
+
+        self.assertEqual(args.scope, "us")
+        self.assertEqual(args.notify_user_id, ["user-1", "user-2"])
+
+
 if __name__ == "__main__":
     unittest.main()

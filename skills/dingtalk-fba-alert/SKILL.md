@@ -52,30 +52,33 @@ bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh
 ```
 
 This project already knows how to generate the report and send the correct files to the configured recipients.
+When the trigger comes from a chat surface that provides the current asker's DingTalk `sender_id`, append `--notify-user-id <sender_id>` so the files are sent only to that asker instead of the repository defaults.
 
 ## Supported Trigger Phrase
 
 Use this fixed mapping for the natural-language trigger:
 
-- `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all`
+- `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all --notify-user-id <sender_id>`
 
 If the user explicitly asks to test only, prepend `--dry-run` to the mapped command.
+If the current chat context does not expose a trustworthy `sender_id`, omit `--notify-user-id` and fall back to the repository defaults.
 
 Do not invent extra aliases or fuzzy matches. If the user asks for country-specific Libraton alerts, tell them this skill no longer exposes country trigger phrases and that scoped runs must be invoked explicitly by command.
 
 ## Delivery Rule
 
-OpenClaw should handle delivery when the user wants the AI to send the final conversational response.
-For this skill, do not use the live dingtalk send path as a substitute for the AI's own reply channel unless the user explicitly asks to run the repository's built-in send flow.
-When the user explicitly requests a live project run, let the project send files directly through DingTalk.
-The AI should not replace the project's delivery logic with its own messaging flow.
+For the fixed natural-language trigger `LIBRATON库存预警`, treat it as an explicit live-send request.
+Run the repository command that performs the built-in DingTalk delivery flow.
+Do not rewrite that trigger into a dry-run summary-only path.
+After the live run, the AI may report success or failure in chat, but the project remains responsible for the actual DingTalk file delivery.
+When `--notify-user-id <sender_id>` is present, the repository will override its default recipient list and send only to that current asker.
 
 ## Failure Handling
 
 - Do not silently switch from dry-run to live send, or from live send to dry-run.
 - Do not use scheduler mode from this skill unless the user explicitly asks to manage scheduled execution.
 - Surface missing env vars clearly.
-- If the user wants the standard DingTalk file delivery, use the live project command instead of trying to simulate it in the AI response.
+- When the user explicitly requests a live project run, let the project send files directly through DingTalk.
 - If Python dependencies are missing, tell the user which install step is needed.
 - If Lingxing or Listing requests hit rate limits, tell the user whether the project retried automatically and whether the run ultimately succeeded or failed.
 

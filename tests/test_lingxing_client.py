@@ -139,6 +139,31 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(rows2, [{"quantity": 5}])
             self.assertEqual(calls, 1)
 
+    async def test_fetch_source_list_retries_transient_connection_error_response(self) -> None:
+        client = LingxingClient(make_config())
+        calls = 0
+
+        async def fake_request(
+            access_token: str,
+            route_name: str,
+            method: str,
+            req_params: dict | None = None,
+            req_body: dict | None = None,
+            **kwargs: object,
+        ) -> dict:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return {"code": "500", "msg": "请求连接异常,请稍后再试", "data": None}
+            return {"code": 0, "data": {"source_list": [{"quantity": 5}]}}
+
+        client.request = fake_request  # type: ignore[method-assign]
+
+        rows = await client.fetch_source_list("token", "1448", "B001", "2")
+
+        self.assertEqual(rows, [{"quantity": 5}])
+        self.assertEqual(calls, 2)
+
     async def test_fetch_inventory_snapshot_map_processes_pairs_concurrently(self) -> None:
         client = LingxingClient(make_config())
         max_in_flight = 0

@@ -73,6 +73,12 @@ def is_rate_limited_response(resp: dict) -> bool:
     return code == "3001008" or "too frequently" in message
 
 
+def is_transient_connection_error_response(resp: dict) -> bool:
+    code = str(resp.get("code") or "").strip()
+    message = str(resp.get("msg") or resp.get("message") or "").strip().lower()
+    return code == "500" and "请求连接异常" in message
+
+
 def is_source_list_rate_limited_response(resp: dict) -> bool:
     return is_rate_limited_response(resp)
 
@@ -289,7 +295,7 @@ class LingxingClient:
             )
             if safe_int(resp.get("code")) == 0:
                 return resp
-            if is_rate_limited_response(resp) and attempt < retries:
+            if (is_rate_limited_response(resp) or is_transient_connection_error_response(resp)) and attempt < retries:
                 await asyncio.sleep(attempt)
                 continue
             return resp

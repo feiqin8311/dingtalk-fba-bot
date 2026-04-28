@@ -19,6 +19,7 @@ from .store_policies import (
     resolve_store_report_group_name,
     resolve_store_report_user_ids,
 )
+from .utils import safe_int
 
 INVENTORY_SNAPSHOT_CANDIDATE_THRESHOLD = 5
 
@@ -102,9 +103,24 @@ def build_inventory_snapshot_candidate_sid_asin_map(
     allowed_sids: set[str],
     seller_map: dict[str, str],
 ) -> dict[str, set[str]]:
-    _ = prelim_alerts
     _ = seller_map
-    return build_sid_asin_map(items, allowed_sids)
+    sid_asin_map = build_alert_sid_asin_map(prelim_alerts)
+    for item in items:
+        basic = item.get("basic_info") or {}
+        sid = str(basic.get("sid") or "").strip()
+        asin = str(basic.get("asin") or "").strip()
+        if not sid or not asin or sid not in allowed_sids:
+            continue
+        amazon_quantity_info = ((item.get("data") or {}).get("amazon_quantity_info") or {})
+        fba_inbound_inventory = safe_int(amazon_quantity_info.get("amazon_quantity_shipping"))
+        fba_inventory = (
+            safe_int(amazon_quantity_info.get("afn_fulfillable_quantity"))
+            + safe_int(amazon_quantity_info.get("reserved_fc_transfers"))
+            + safe_int(amazon_quantity_info.get("reserved_fc_processing"))
+        )
+        if 0 < fba_inbound_inventory and fba_inventory <= INVENTORY_SNAPSHOT_CANDIDATE_THRESHOLD:
+            sid_asin_map.setdefault(sid, set()).add(asin)
+    return sid_asin_map
 
 
 def notify_report(report_path: str, notifier: Optional[object], user_ids: list[str], dry_run: bool) -> None:
@@ -147,6 +163,15 @@ def notify_store_reports(
         notify_report(store_report_path, notifier, user_ids, dry_run=dry_run)
 
 
+def resolve_delivery_user_ids(
+    fallback_user_ids: list[str],
+    override_user_ids: list[str],
+) -> list[str]:
+    if override_user_ids:
+        return override_user_ids
+    return fallback_user_ids
+
+
 async def run_alert_job(
     client: object,
     today: date,
@@ -154,11 +179,13 @@ async def run_alert_job(
     exporter: Optional[Callable[[list[AlertRecord], date], str]] = None,
     notifier: Optional[object] = None,
     notify_user_ids: Optional[list[str]] = None,
+    notify_user_override_ids: Optional[list[str]] = None,
     dry_run: bool = False,
     scope: str = "all",
 ) -> AlertJobResult:
     export_report = exporter or (lambda alerts, current_today: "")
     user_ids = notify_user_ids or []
+    override_user_ids = notify_user_override_ids or []
     try:
         started_at = time.perf_counter()
         scope_value = AlertScope.parse(scope)
@@ -176,9 +203,10 @@ async def run_alert_job(
         print(f"[main] 原始返回中命中目标店铺的记录数: {raw_filtered_count}")
         print(f"[main] 目标店铺记录分布: {sid_distribution}")
 
+        prelim_alerts = parse_summary_items(raw_items, today, seller_map, scoped_sid_list)
         inventory_snapshot_candidate_sid_asin_map = build_inventory_snapshot_candidate_sid_asin_map(
             raw_items,
-            [],
+            prelim_alerts,
             allowed_sids,
             seller_map,
         )
@@ -237,14 +265,32 @@ async def run_alert_job(
             report_path = export_scoped_alert_report(alerts, today, report_group_name)
         print(f"[perf] report_export_seconds={time.perf_counter() - report_started_at:.2f}")
         if scope_value is AlertScope.ALL:
-            notify_report(report_path, notifier, resolve_main_report_user_ids(user_ids), dry_run=dry_run)
-            notify_store_reports(report_path, alerts, today, notifier, user_ids, dry_run=dry_run)
+            main_report_user_ids = resolve_delivery_user_ids(
+                resolve_main_report_user_ids(user_ids),
+                override_user_ids,
+            )
+            notify_report(report_path, notifier, main_report_user_ids, dry_run=dry_run)
+            if override_user_ids:
+                notify_store_reports(
+                    report_path,
+                    alerts,
+                    today,
+                    notifier,
+                    override_user_ids,
+                    dry_run=dry_run,
+                )
+            else:
+                notify_store_reports(report_path, alerts, today, notifier, user_ids, dry_run=dry_run)
         else:
             report_group_name = resolve_scope_report_group_name(scope_value)
+            scoped_user_ids = resolve_delivery_user_ids(
+                resolve_store_report_user_ids(report_group_name, user_ids),
+                override_user_ids,
+            )
             notify_report(
                 report_path,
                 notifier,
-                resolve_store_report_user_ids(report_group_name, user_ids),
+                scoped_user_ids,
                 dry_run=dry_run,
             )
         print(f"[perf] total_run_seconds={time.perf_counter() - started_at:.2f}")

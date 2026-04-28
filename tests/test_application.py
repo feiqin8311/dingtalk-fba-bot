@@ -77,7 +77,7 @@ class ApplicationTests(unittest.TestCase):
     def test_count_sid_asin_pairs_sums_unique_pairs(self) -> None:
         self.assertEqual(count_sid_asin_pairs({"1448": {"A1", "A2"}, "1444": {"B1"}}), 3)
 
-    def test_build_inventory_snapshot_candidate_sid_asin_map_includes_all_allowed_asins(self) -> None:
+    def test_build_inventory_snapshot_candidate_sid_asin_map_limits_snapshot_candidates(self) -> None:
         alert_item = make_summary_item(asin="B001", hash_id="hash-alert", sid="1448", fba_days=6)
         low_stock_item = make_summary_item(
             asin="B002",
@@ -117,7 +117,7 @@ class ApplicationTests(unittest.TestCase):
             {"1448": "店铺A"},
         )
 
-        self.assertEqual(sid_asin_map, {"1448": {"B001", "B002", "B003"}})
+        self.assertEqual(sid_asin_map, {"1448": {"B001", "B002"}})
 
     def test_build_inventory_snapshot_candidate_sid_asin_map_keeps_allowed_jp_jp_asins(self) -> None:
         a_level_item = make_summary_item(
@@ -464,6 +464,45 @@ class ApplicationTests(unittest.TestCase):
             ],
         )
 
+    def test_run_alert_job_with_notify_override_sends_only_to_override_user(self) -> None:
+        item = make_summary_item(
+            asin="B-US",
+            hash_id="hash-us-override",
+            sid="1443",
+            msku="MSKU-US",
+            fba_plus_days=45,
+            fba_days=20,
+            out_stock_date="2026-05-02",
+        )
+        client = FakeLingxingClient(
+            seller_map={"1443": "Libraton NA-US"},
+            raw_items=[item],
+            inventory_snapshot_map={("1443", "B-US"): InventorySnapshot(8, 1, 1, 10, 5)},
+            listing_items=[],
+        )
+        notifier = FakeNotifier()
+
+        result = asyncio.run(
+            run_alert_job(
+                client=client,
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                exporter=lambda alerts, today: "reports/2026-04-21/LIBRATON库存预警-20260421.xlsx",
+                notifier=notifier,
+                notify_user_ids=["fallback-user"],
+                scope="us",
+                notify_user_override_ids=["asker-user"],
+            )
+        )
+
+        self.assertEqual(result.report_path, "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx")
+        self.assertEqual(
+            notifier.sent,
+            [
+                ("asker-user", "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx"),
+            ],
+        )
+
     def test_run_alert_job_with_eu_scope_returns_combined_eu_report(self) -> None:
         uk_item = make_summary_item(
             asin="B-UK",
@@ -499,7 +538,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(result.report_path, "reports/2026-04-21/Libraton EU/LIBRATON库存预警-EU-20260421.xlsx")
         self.assertIn(("fetch_summary_items", ("1446", "1448")), client.calls)
 
-    def test_run_alert_job_fetches_inventory_snapshot_for_all_allowed_asins(self) -> None:
+    def test_run_alert_job_fetches_inventory_snapshot_only_for_candidates(self) -> None:
         alert_item = make_summary_item(asin="B001", hash_id="hash-alert", sid="1448", fba_days=6)
         c_level_candidate_item = make_summary_item(
             asin="B002",
@@ -543,7 +582,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertIn(("fetch_inventory_snapshot_map", {"1448": {"B001", "B002", "B003"}}), client.calls)
+        self.assertIn(("fetch_inventory_snapshot_map", {"1448": {"B001", "B002"}}), client.calls)
 
     def test_run_alert_job_uses_inventory_snapshot_when_summary_inventory_fields_are_missing(self) -> None:
         item = make_summary_item(

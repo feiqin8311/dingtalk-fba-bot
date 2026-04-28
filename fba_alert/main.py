@@ -28,6 +28,13 @@ def parse_args() -> argparse.Namespace:
         choices=["all", "us", "ca", "jp", "eu"],
         help="预警范围：all/us/ca/jp/eu，默认 all",
     )
+    parser.add_argument(
+        "--notify-user-id",
+        dest="notify_user_id",
+        action="append",
+        default=[],
+        help="覆盖默认收件人，只发给指定钉钉 userId；可重复传入多个",
+    )
     return parser.parse_args()
 
 
@@ -45,6 +52,7 @@ async def run_once(args: argparse.Namespace) -> int:
         exporter=export_alert_report,
         notifier=notifier,
         notify_user_ids=config.dingtalk.user_ids,
+        notify_user_override_ids=args.notify_user_id,
         dry_run=args.dry_run,
         scope=args.scope,
     )
