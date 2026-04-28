@@ -12,12 +12,13 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertTrue((SKILL_ROOT / "scripts" / "run-fba-alert.sh").exists())
         self.assertTrue((SKILL_ROOT / "references" / "config.md").exists())
 
-    def test_skill_runner_uses_dingtalk_bot_conda_env(self) -> None:
+    def test_skill_runner_execs_dingtalk_bot_env_python(self) -> None:
         runner_text = (SKILL_ROOT / "scripts" / "run-fba-alert.sh").read_text(encoding="utf-8")
 
-        self.assertIn("conda", runner_text)
-        self.assertIn("run -n dingtalk-bot", runner_text)
-        self.assertIn("python -m fba_alert.main", runner_text)
+        self.assertIn("python_bin=", runner_text)
+        self.assertIn("/envs/dingtalk-bot/bin/python", runner_text)
+        self.assertIn('exec env \\', runner_text)
+        self.assertIn('  "${python_bin}" -m fba_alert.main "$@"', runner_text)
 
     def test_skill_instructions_do_not_expose_scheduler_mode(self) -> None:
         skill_text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")

@@ -3,10 +3,15 @@ set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/../../.." && pwd)"
-conda_bin="/home/yida/miniconda3/condabin/conda"
+python_bin="/home/yida/miniconda3/envs/dingtalk-bot/bin/python"
+
+if [[ ! -x "${python_bin}" ]]; then
+  echo "dingtalk-bot env python does not exist: ${python_bin}" >&2
+  exit 1
+fi
 
 cd "${repo_root}"
-"${conda_bin}" run -n dingtalk-bot env \
+exec env \
   -u HTTP_PROXY \
   -u HTTPS_PROXY \
   -u ALL_PROXY \
@@ -16,4 +21,4 @@ cd "${repo_root}"
   -u NO_PROXY \
   -u no_proxy \
   PYTHONUNBUFFERED=1 \
-  python -m fba_alert.main "$@"
+  "${python_bin}" -m fba_alert.main "$@"
