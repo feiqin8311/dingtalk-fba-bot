@@ -60,6 +60,8 @@ Use this fixed mapping for the natural-language trigger:
 
 - `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all --notify-user-id <sender_id>`
 
+The ops wrapper may also expose explicit scoped commands such as `LIBRATON库存预警-美国` / `-加拿大` / `-欧洲` / `-日本`, which should map to `--scope us|ca|eu|jp` respectively.
+
 If the user explicitly asks to test only, prepend `--dry-run` to the mapped command.
 If the current chat context does not expose a trustworthy `sender_id`, omit `--notify-user-id` and fall back to the repository defaults.
 

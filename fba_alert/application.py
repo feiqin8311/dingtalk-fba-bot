@@ -103,24 +103,9 @@ def build_inventory_snapshot_candidate_sid_asin_map(
     allowed_sids: set[str],
     seller_map: dict[str, str],
 ) -> dict[str, set[str]]:
+    _ = prelim_alerts
     _ = seller_map
-    sid_asin_map = build_alert_sid_asin_map(prelim_alerts)
-    for item in items:
-        basic = item.get("basic_info") or {}
-        sid = str(basic.get("sid") or "").strip()
-        asin = str(basic.get("asin") or "").strip()
-        if not sid or not asin or sid not in allowed_sids:
-            continue
-        amazon_quantity_info = ((item.get("data") or {}).get("amazon_quantity_info") or {})
-        fba_inbound_inventory = safe_int(amazon_quantity_info.get("amazon_quantity_shipping"))
-        fba_inventory = (
-            safe_int(amazon_quantity_info.get("afn_fulfillable_quantity"))
-            + safe_int(amazon_quantity_info.get("reserved_fc_transfers"))
-            + safe_int(amazon_quantity_info.get("reserved_fc_processing"))
-        )
-        if 0 < fba_inbound_inventory and fba_inventory <= INVENTORY_SNAPSHOT_CANDIDATE_THRESHOLD:
-            sid_asin_map.setdefault(sid, set()).add(asin)
-    return sid_asin_map
+    return build_sid_asin_map(items, allowed_sids)
 
 
 def notify_report(report_path: str, notifier: Optional[object], user_ids: list[str], dry_run: bool) -> None:

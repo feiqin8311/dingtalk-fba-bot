@@ -677,6 +677,58 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(record.fba_transfer_reserved_inventory, 2)
         self.assertEqual(record.fba_processing_inventory, 1)
 
+    def test_run_alert_job_can_promote_non_alert_summary_row_to_c_level_from_source_list(self) -> None:
+        item = make_summary_item(
+            asin="B0FDG7BRXJ",
+            hash_id="hash-source-list-c-level",
+            sid="1457",
+            msku="919005",
+            fba_plus_days=48,
+            fba_days=0,
+            out_stock_date="2026-04-28",
+            amazon_quantity_valid=0,
+            amazon_quantity_shipping=0,
+            afn_fulfillable_quantity=0,
+            reserved_fc_transfers=0,
+            reserved_fc_processing=0,
+        )
+        item["data"]["amazon_quantity_info"] = {
+            "amazon_quantity_valid": None,
+            "amazon_quantity_shipping": None,
+            "afn_fulfillable_quantity": None,
+            "reserved_fc_transfers": None,
+            "reserved_fc_processing": None,
+        }
+        client = FakeLingxingClient(
+            seller_map={"1457": "Libraton JP-JP"},
+            raw_items=[item],
+            inventory_snapshot_map={("1457", "B0FDG7BRXJ"): InventorySnapshot(0, 0, 0, 0, 48)},
+            listing_items=[],
+        )
+        exported: list[tuple[list[object], date]] = []
+
+        def export_report(alerts: list[object], today: date) -> str:
+            exported.append((alerts, today))
+            return "reports/2026-04-28/LIBRATON库存预警-20260428.xlsx"
+
+        result = asyncio.run(
+            run_alert_job(
+                client=client,
+                today=date(2026, 4, 28),
+                sid_list=["1457"],
+                exporter=export_report,
+                dry_run=True,
+            )
+        )
+
+        self.assertEqual(result.alert_count, 1)
+        record = exported[0][0][0]
+        self.assertEqual(record.level, "C")
+        self.assertEqual(record.fba_inventory, 0)
+        self.assertEqual(record.fba_inbound_inventory, 48)
+        self.assertEqual(record.mskus, ["919005"])
+        self.assertIn(("fetch_inventory_snapshot_map", {"1457": {"B0FDG7BRXJ"}}), client.calls)
+
     def test_run_alert_job_refetches_missing_listing_contacts_individually(self) -> None:
         item = make_summary_item(
             asin="B0912KPQM6",
