@@ -9,9 +9,11 @@ from pathlib import Path
 import time
 from typing import Callable, Optional
 
+from . import dingpan
 from .alerts import apply_listing_contacts, build_listing_contact_map, parse_summary_items
+from .config import DingTalkConfig
 from .models import AlertRecord
-from .report import build_store_report_path, export_scoped_alert_report
+from .report import build_main_report_path, build_store_report_path, export_scoped_alert_report
 from .scopes import AlertScope, resolve_scope_report_group_name, resolve_scope_sid_list
 from .store_policies import (
     resolve_main_report_user_ids,
@@ -108,17 +110,100 @@ def build_inventory_snapshot_candidate_sid_asin_map(
     return build_sid_asin_map(items, allowed_sids)
 
 
-def notify_report(report_path: str, notifier: Optional[object], user_ids: list[str], dry_run: bool) -> None:
+def notify_report(
+    report_path: str,
+    notifier: Optional[object],
+    user_ids: list[str],
+    dry_run: bool,
+    *,
+    preview_url: str = "",
+    title: str = "LIBRATON 库存预警报告",
+) -> None:
     if dry_run:
         print(f"[notify] dry-run 模式，报表已生成: {report_path}")
         return
     if notifier is None:
         raise RuntimeError("非 dry-run 模式必须提供 notifier。")
 
+    if preview_url:
+        text = f"【{title}】\n请查看HTML诊断报告：{preview_url}"
+        for user_id in user_ids:
+            print(f"[notify] 发送钉盘链接: user_id={user_id} url={preview_url}")
+            result = notifier.send_user_text(user_id, text)
+            print(f"[send] user_id={user_id} result={json.dumps(result, ensure_ascii=False)}")
+        return
+
     for user_id in user_ids:
         print(f"[notify] 发送钉钉文件: user_id={user_id}")
         result = notifier.send_user_file(user_id, report_path)
         print(f"[send] user_id={user_id} result={json.dumps(result, ensure_ascii=False)}")
+
+
+def upload_reports_to_dingpan(
+    notifier: object,
+    dingtalk_config: DingTalkConfig,
+    main_report_path: str,
+    alerts: list[AlertRecord],
+    today: date,
+    scope: AlertScope,
+) -> dict[str, str]:
+    """在钉盘建当天日期子文件夹，上传主表和各店铺分表。
+
+    返回 {report_path: preview_url}。失败时返回空 dict 并打印错误，不阻塞消息发送。
+    """
+    if not dingtalk_config.dingpan_enabled:
+        return {}
+
+    try:
+        access_token = notifier.get_access_token()
+        union_id = dingtalk_config.dingpan_union_id
+        if not union_id:
+            union_id = dingpan.get_user_union_id(access_token, dingtalk_config.dingpan_user_id)
+            print(f"[dingpan] 解析 union_id={union_id}")
+
+        date_folder = dingpan.ensure_child_folder(
+            access_token,
+            space_id=dingtalk_config.dingpan_space_id,
+            union_id=union_id,
+            parent_id=dingtalk_config.dingpan_parent_folder_id,
+            folder_name=today.isoformat(),
+        )
+        target_folder_id = str(date_folder["id"])
+
+        upload_paths: list[str] = []
+        if scope is AlertScope.ALL:
+            upload_paths.append(main_report_path)
+        store_report_paths = build_store_report_paths(main_report_path, alerts, today)
+        for store_report_path in store_report_paths.values():
+            if store_report_path not in upload_paths:
+                upload_paths.append(store_report_path)
+
+        preview_url_map: dict[str, str] = {}
+        for path_str in upload_paths:
+            file_path = Path(path_str)
+            if not file_path.exists():
+                print(f"[dingpan] 跳过缺失文件: {file_path}")
+                continue
+            print(f"[dingpan] 上传文件: {file_path.name}")
+            result = dingpan.upload_file(
+                access_token,
+                space_id=dingtalk_config.dingpan_space_id,
+                union_id=union_id,
+                parent_id=target_folder_id,
+                file_path=file_path,
+            )
+            file_id = dingpan.extract_file_id(result["commit"])
+            if not file_id:
+                print(f"[dingpan] 上传成功但未拿到 file_id: {file_path.name}")
+                continue
+            preview_url_map[path_str] = dingpan.build_preview_url(
+                dingtalk_config.dingpan_space_id, file_id
+            )
+            print(f"[dingpan] 预览链接: {file_path.name} -> {preview_url_map[path_str]}")
+        return preview_url_map
+    except Exception as exc:
+        print(f"[dingpan] 上传失败，回退为附件直发: {exc!r}")
+        return {}
 
 
 def build_store_report_paths(report_path: str, alerts: list[AlertRecord], today: date) -> dict[str, str]:
@@ -137,15 +222,24 @@ def notify_store_reports(
     notifier: Optional[object],
     fallback_user_ids: list[str],
     dry_run: bool,
+    preview_url_map: Optional[dict[str, str]] = None,
 ) -> None:
     store_report_paths = build_store_report_paths(main_report_path, alerts, today)
+    preview_url_map = preview_url_map or {}
     for store_name, store_report_path in store_report_paths.items():
         user_ids = resolve_store_report_user_ids(store_name, fallback_user_ids)
         print(
             "[notify] 店铺分表准备发送: "
             f"store={store_name} user_count={len(user_ids)} path={store_report_path}"
         )
-        notify_report(store_report_path, notifier, user_ids, dry_run=dry_run)
+        notify_report(
+            store_report_path,
+            notifier,
+            user_ids,
+            dry_run=dry_run,
+            preview_url=preview_url_map.get(store_report_path, ""),
+            title=f"LIBRATON 库存预警 - {store_name}",
+        )
 
 
 def resolve_delivery_user_ids(
@@ -167,6 +261,7 @@ async def run_alert_job(
     notify_user_override_ids: Optional[list[str]] = None,
     dry_run: bool = False,
     scope: str = "all",
+    dingtalk_config: Optional[DingTalkConfig] = None,
 ) -> AlertJobResult:
     export_report = exporter or (lambda alerts, current_today: "")
     user_ids = notify_user_ids or []
@@ -249,23 +344,46 @@ async def run_alert_job(
             report_group_name = resolve_scope_report_group_name(scope_value)
             report_path = export_scoped_alert_report(alerts, today, report_group_name)
         print(f"[perf] report_export_seconds={time.perf_counter() - report_started_at:.2f}")
+
+        preview_url_map: dict[str, str] = {}
+        if not dry_run and notifier is not None and dingtalk_config is not None and dingtalk_config.dingpan_enabled:
+            print("[main] 上传报表到钉盘日期子文件夹")
+            dingpan_started_at = time.perf_counter()
+            preview_url_map = upload_reports_to_dingpan(
+                notifier,
+                dingtalk_config,
+                report_path,
+                alerts,
+                today,
+                scope_value,
+            )
+            print(f"[perf] dingpan_upload_seconds={time.perf_counter() - dingpan_started_at:.2f}")
+
         if scope_value is AlertScope.ALL:
             main_report_user_ids = resolve_delivery_user_ids(
                 resolve_main_report_user_ids(user_ids),
                 override_user_ids,
             )
-            notify_report(report_path, notifier, main_report_user_ids, dry_run=dry_run)
+            notify_report(
+                report_path,
+                notifier,
+                main_report_user_ids,
+                dry_run=dry_run,
+                preview_url=preview_url_map.get(report_path, ""),
+                title="LIBRATON 库存预警 - 总表",
+            )
             if override_user_ids:
+                print("[notify] 检测到 --notify-user-id override，跳过店铺分表分发，仅发送总表")
+            else:
                 notify_store_reports(
                     report_path,
                     alerts,
                     today,
                     notifier,
-                    override_user_ids,
+                    user_ids,
                     dry_run=dry_run,
+                    preview_url_map=preview_url_map,
                 )
-            else:
-                notify_store_reports(report_path, alerts, today, notifier, user_ids, dry_run=dry_run)
         else:
             report_group_name = resolve_scope_report_group_name(scope_value)
             scoped_user_ids = resolve_delivery_user_ids(
@@ -277,6 +395,8 @@ async def run_alert_job(
                 notifier,
                 scoped_user_ids,
                 dry_run=dry_run,
+                preview_url=preview_url_map.get(report_path, ""),
+                title=f"LIBRATON 库存预警 - {report_group_name}",
             )
         print(f"[perf] total_run_seconds={time.perf_counter() - started_at:.2f}")
         return AlertJobResult(

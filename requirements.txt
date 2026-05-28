@@ -3,4 +3,5 @@ orjson
 pycryptodome
 openpyxl
 apscheduler
+requests
 # optional: aiohttp_socks

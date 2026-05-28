@@ -55,6 +55,7 @@ async def run_once(args: argparse.Namespace) -> int:
         notify_user_override_ids=args.notify_user_id,
         dry_run=args.dry_run,
         scope=args.scope,
+        dingtalk_config=config.dingtalk,
     )
     return 0
 

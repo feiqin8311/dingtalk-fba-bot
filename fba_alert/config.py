@@ -31,6 +31,11 @@ class DingTalkConfig:
     app_secret: str
     robot_code: str
     user_ids: list[str]
+    dingpan_enabled: bool
+    dingpan_space_id: str
+    dingpan_parent_folder_id: str
+    dingpan_user_id: str
+    dingpan_union_id: str
 
 
 @dataclass
@@ -63,6 +68,11 @@ def load_config() -> AppConfig:
         app_secret=getenv_str("DINGTALK_APP_SECRET"),
         robot_code=getenv_str("DINGTALK_ROBOT_CODE"),
         user_ids=getenv_list("DINGTALK_USER_IDS"),
+        dingpan_enabled=getenv_bool("DINGTALK_DINGPAN_ENABLED", True),
+        dingpan_space_id=getenv_str("DINGTALK_DINGPAN_SPACE_ID", "28859011990"),
+        dingpan_parent_folder_id=getenv_str("DINGTALK_DINGPAN_PARENT_FOLDER_ID", "221392062127"),
+        dingpan_user_id=getenv_str("DINGTALK_DINGPAN_USER_ID"),
+        dingpan_union_id=getenv_str("DINGTALK_DINGPAN_UNION_ID"),
     )
     return AppConfig(
         lingxing=lingxing,
