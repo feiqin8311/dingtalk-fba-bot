@@ -75,8 +75,23 @@ def is_rate_limited_response(resp: dict) -> bool:
 
 def is_transient_connection_error_response(resp: dict) -> bool:
     code = str(resp.get("code") or "").strip()
-    message = str(resp.get("msg") or resp.get("message") or "").strip().lower()
-    return code == "500" and "请求连接异常" in message
+    if code != "500":
+        return False
+
+    data = resp.get("data") or {}
+    haystacks = [
+        str(resp.get("msg") or "").strip().lower(),
+        str(resp.get("message") or "").strip().lower(),
+        str(resp.get("error_details") or "").strip().lower(),
+        str(data.get("throwable") or "").strip().lower(),
+    ]
+    transient_markers = (
+        "请求连接异常",
+        "request connection exception",
+        "网络错误",
+        "illegalreferencecountexception",
+    )
+    return any(marker in haystack for marker in transient_markers for haystack in haystacks)
 
 
 def is_source_list_rate_limited_response(resp: dict) -> bool:
