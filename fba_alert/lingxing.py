@@ -330,19 +330,25 @@ class LingxingClient:
         print(f"[lingxing] 店铺映射完成: {mapping}")
         return mapping
 
-    async def fetch_summary_items(self, access_token: str, sid_list: Optional[list[str]] = None) -> list[dict]:
+    async def fetch_summary_items(
+        self,
+        access_token: str,
+        sid_list: Optional[list[str]] = None,
+        data_type: Optional[int] = None,
+    ) -> list[dict]:
         all_rows: list[dict] = []
         offset = 0
         total = None
         page_no = 0
         effective_sid_list = sid_list or self.config.sid_list
+        effective_data_type = self.config.data_type if data_type is None else data_type
 
         while total is None or offset < total:
             page_no += 1
             print(f"[lingxing] 拉取补货建议: page={page_no} offset={offset} length={self.config.page_size}")
             req_body = {
                 "sid_list": effective_sid_list,
-                "data_type": self.config.data_type,
+                "data_type": effective_data_type,
                 "mode": self.config.mode,
                 "offset": offset,
                 "length": self.config.page_size,

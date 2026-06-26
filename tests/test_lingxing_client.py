@@ -25,6 +25,18 @@ def make_config() -> LingxingConfig:
     )
 
 
+class LingxingConfigDefaultsTests(unittest.TestCase):
+    def test_default_data_type_uses_msku_dimension(self) -> None:
+        from unittest.mock import patch
+
+        from fba_alert.config import load_config
+
+        with patch.dict("os.environ", {}, clear=True):
+            config = load_config()
+
+        self.assertEqual(config.lingxing.data_type, 2)
+
+
 class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_async_context_manager_closes_underlying_http_session(self) -> None:
         client = LingxingClient(make_config())
@@ -91,6 +103,31 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(rows, [{"basic_info": {"asin": "B001"}}])
         self.assertEqual(calls, 2)
+
+    async def test_fetch_summary_items_can_override_data_type(self) -> None:
+        client = LingxingClient(make_config())
+        request_bodies: list[dict] = []
+
+        async def fake_request(
+            access_token: str,
+            route_name: str,
+            method: str,
+            req_params: dict | None = None,
+            req_body: dict | None = None,
+            **kwargs: object,
+        ) -> dict:
+            request_bodies.append(req_body or {})
+            return {
+                "code": 0,
+                "data": [{"basic_info": {"asin": "B001"}}],
+                "total": 1,
+            }
+
+        client.request = fake_request  # type: ignore[method-assign]
+
+        await client.fetch_summary_items("token", ["1448"], data_type=2)
+
+        self.assertEqual(request_bodies[0]["data_type"], 2)
 
     async def test_fetch_seller_map_raises_after_retry_budget_exhausted(self) -> None:
         client = LingxingClient(make_config())

@@ -11,10 +11,26 @@ from .utils import calc_out_stock_days, safe_float, safe_int, unique_keep_order
 
 
 def is_primary_msku(msku: str) -> bool:
-    value = (msku or "").strip().lower()
+    value = normalize_msku(msku).lower()
     if not value:
         return False
     return not value.startswith("amzn.gr.")
+
+
+def normalize_msku(msku: str) -> str:
+    return (msku or "").strip().rstrip(",").strip()
+
+
+def collapse_msku_variants(mskus: list[str]) -> list[str]:
+    ordered = unique_keep_order([normalize_msku(msku) for msku in mskus if normalize_msku(msku)])
+    canonical_lower = {msku.lower() for msku in ordered}
+    result: list[str] = []
+    for msku in ordered:
+        lowered = msku.lower()
+        if lowered.endswith("-m") and lowered[:-2] in canonical_lower:
+            continue
+        result.append(msku)
+    return result
 
 
 def build_msku_reason_list(records: list[AlertRecord], level: str) -> list[str]:
@@ -49,6 +65,25 @@ def build_listing_contact_map(items: list[dict]) -> dict[tuple[str, str], str]:
 def apply_listing_contacts(records: list[AlertRecord], contact_map: dict[tuple[str, str], str]) -> None:
     for record in records:
         record.listing_contacts = contact_map.get((record.sid, record.asin), "")
+
+
+def build_inventory_days(snapshot: InventorySnapshot, summary_daily_sales: float, today: date) -> tuple[int, int, str, int]:
+    if summary_daily_sales <= 0:
+        return -1, -1, "", -1
+
+    fba_days = int(snapshot.fba_inventory / summary_daily_sales)
+    fba_plus_days = int((snapshot.fba_inventory + snapshot.fba_inbound_inventory) / summary_daily_sales)
+    out_stock_days = fba_days
+    out_stock_date = ""
+    if out_stock_days > 0:
+        out_stock_date = date.fromordinal(today.toordinal() + out_stock_days).isoformat()
+    return fba_days, fba_plus_days, out_stock_date, out_stock_days
+
+
+def has_value(value: object) -> bool:
+    return value not in (None, "")
+
+
 def classify_record(
     item: dict,
     today: date,
@@ -75,30 +110,57 @@ def classify_record(
         return None
     inventory_snapshot = (inventory_snapshot_map or {}).get((sid, asin))
 
-    mskus = unique_keep_order(
+    mskus = collapse_msku_variants(
         [
-            str(row.get("msku") or "").strip()
+            normalize_msku(str(row.get("msku") or ""))
             for row in (basic.get("msku_fnsku_list") or [])
-            if is_primary_msku(str(row.get("msku") or "").strip())
+            if is_primary_msku(str(row.get("msku") or ""))
         ]
     )
-    fba_plus_days = safe_int(suggest.get("fba_available_sale_days"))
-    fba_days = safe_int(suggest.get("available_sale_days_fba"))
-    if inventory_snapshot is None:
-        fba_inventory = safe_int(amazon_quantity_info.get("amazon_quantity_valid"))
-        fba_inbound_inventory = safe_int(amazon_quantity_info.get("amazon_quantity_shipping"))
-        fba_sellable_inventory = safe_int(amazon_quantity_info.get("afn_fulfillable_quantity"))
-        fba_transfer_reserved_inventory = safe_int(amazon_quantity_info.get("reserved_fc_transfers"))
-        fba_processing_inventory = safe_int(amazon_quantity_info.get("reserved_fc_processing"))
-    else:
-        fba_inventory = inventory_snapshot.fba_inventory
-        fba_inbound_inventory = inventory_snapshot.fba_inbound_inventory
-        fba_sellable_inventory = inventory_snapshot.fba_sellable_inventory
-        fba_transfer_reserved_inventory = inventory_snapshot.fba_transfer_reserved_inventory
-        fba_processing_inventory = inventory_snapshot.fba_processing_inventory
     summary_daily_sales = round(safe_float(suggest.get("estimated_sale_avg_quantity")), 2)
-    out_stock_date = str(suggest.get("out_stock_date") or "").strip()
-    out_stock_days = calc_out_stock_days(out_stock_date, today)
+    summary_fba_inventory_raw = amazon_quantity_info.get("amazon_quantity_valid")
+    summary_fba_inbound_inventory_raw = amazon_quantity_info.get("amazon_quantity_shipping")
+    summary_fba_sellable_inventory_raw = amazon_quantity_info.get("afn_fulfillable_quantity")
+    summary_fba_transfer_reserved_inventory_raw = amazon_quantity_info.get("reserved_fc_transfers")
+    summary_fba_processing_inventory_raw = amazon_quantity_info.get("reserved_fc_processing")
+    summary_fba_plus_days = safe_int(suggest.get("fba_available_sale_days"))
+    summary_fba_days = safe_int(suggest.get("available_sale_days_fba"))
+    summary_out_stock_date = str(suggest.get("out_stock_date") or "").strip()
+    summary_out_stock_days = calc_out_stock_days(summary_out_stock_date, today)
+    fba_plus_days = summary_fba_plus_days
+    fba_days = summary_fba_days
+    fba_inventory = safe_int(summary_fba_inventory_raw)
+    fba_inbound_inventory = safe_int(summary_fba_inbound_inventory_raw)
+    fba_sellable_inventory = safe_int(summary_fba_sellable_inventory_raw)
+    fba_transfer_reserved_inventory = safe_int(summary_fba_transfer_reserved_inventory_raw)
+    fba_processing_inventory = safe_int(summary_fba_processing_inventory_raw)
+    out_stock_date = summary_out_stock_date
+    out_stock_days = summary_out_stock_days
+    if inventory_snapshot is not None:
+        if not has_value(summary_fba_inventory_raw):
+            fba_inventory = inventory_snapshot.fba_inventory
+        if not has_value(summary_fba_inbound_inventory_raw):
+            fba_inbound_inventory = inventory_snapshot.fba_inbound_inventory
+        if not has_value(summary_fba_sellable_inventory_raw):
+            fba_sellable_inventory = inventory_snapshot.fba_sellable_inventory
+        if not has_value(summary_fba_transfer_reserved_inventory_raw):
+            fba_transfer_reserved_inventory = inventory_snapshot.fba_transfer_reserved_inventory
+        if not has_value(summary_fba_processing_inventory_raw):
+            fba_processing_inventory = inventory_snapshot.fba_processing_inventory
+        if not has_value(suggest.get("available_sale_days_fba")) or not has_value(suggest.get("fba_available_sale_days")):
+            fallback_fba_days, fallback_fba_plus_days, fallback_out_stock_date, fallback_out_stock_days = build_inventory_days(
+                inventory_snapshot,
+                summary_daily_sales,
+                today,
+            )
+            if fallback_fba_days >= 0:
+                if not has_value(suggest.get("available_sale_days_fba")):
+                    fba_days = fallback_fba_days
+                if not has_value(suggest.get("fba_available_sale_days")):
+                    fba_plus_days = fallback_fba_plus_days
+                if not has_value(suggest.get("out_stock_date")):
+                    out_stock_date = fallback_out_stock_date
+                    out_stock_days = fallback_out_stock_days
     seller_name = seller_map.get(sid, sid)
     thresholds = get_store_policy(seller_name).alert_thresholds
 

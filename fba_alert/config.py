@@ -54,7 +54,7 @@ def load_config() -> AppConfig:
         token_request_key=getenv_str("LINGXING_TOKEN_REQUEST_KEY", getenv_str("LINGXING_APP_ID", "ak_8CW3MktzhMfAS")),
         ssl_verify=getenv_bool("LINGXING_SSL_VERIFY", True),
         sid_list=getenv_list("LINGXING_SID_LIST", "1448,1446"),
-        data_type=getenv_int("LINGXING_DATA_TYPE", 1),
+        data_type=getenv_int("LINGXING_DATA_TYPE", 2),
         mode=getenv_int("LINGXING_MODE", 0),
         page_size=min(max(getenv_int("LINGXING_PAGE_SIZE", 50), 1), 50),
         listing_concurrency=min(max(getenv_int("LINGXING_LISTING_CONCURRENCY", 2), 1), 20),

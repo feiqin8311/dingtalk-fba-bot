@@ -25,9 +25,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--scope",
         default="all",
-        choices=["all", "us", "ca", "jp", "eu"],
-        help="预警范围：all/us/ca/jp/eu，默认 all",
+        choices=["all", "us", "ca", "jp", "eu", "ezarc-test", "yplus-test"],
+        help="预警范围：all/us/ca/jp/eu/ezarc-test/yplus-test，默认 all",
     )
+    parser.add_argument("--upload-only", action="store_true", help="只上传钉盘，不发送任何钉钉消息")
     parser.add_argument(
         "--notify-user-id",
         dest="notify_user_id",
@@ -55,6 +56,7 @@ async def run_once(args: argparse.Namespace) -> int:
         notify_user_override_ids=args.notify_user_id,
         dry_run=args.dry_run,
         scope=args.scope,
+        upload_only=args.upload_only,
         dingtalk_config=config.dingtalk,
     )
     return 0

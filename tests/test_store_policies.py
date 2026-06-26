@@ -39,6 +39,77 @@ class StorePolicyTests(unittest.TestCase):
             ["17489140420206931", "17490879808802516"],
         )
 
+    def test_get_store_policy_returns_special_policy_for_libraton_eu(self) -> None:
+        policy = get_store_policy("Libraton EU-DE")
+
+        self.assertEqual(policy.alert_thresholds["a_fba_days"], 14)
+        self.assertEqual(policy.alert_thresholds["a_fba_plus_days"], 65)
+        self.assertEqual(policy.alert_thresholds["a_out_stock_days"], 65)
+        self.assertEqual(policy.alert_thresholds["b_fba_days"], 30)
+        self.assertIsNone(policy.alert_thresholds["b_equal_out_stock_days"])
+        self.assertEqual(policy.alert_thresholds["b_fba_plus_days"], 80)
+
+    def test_get_store_policy_returns_special_policy_for_ezarc_jp(self) -> None:
+        policy = get_store_policy("EZARC JP-JP")
+
+        self.assertEqual(policy.alert_thresholds["a_fba_days"], 20)
+        self.assertEqual(policy.alert_thresholds["a_fba_plus_days"], 30)
+        self.assertEqual(policy.alert_thresholds["a_out_stock_days"], 50)
+        self.assertIsNone(policy.alert_thresholds["b_fba_days"])
+        self.assertEqual(policy.notify_user_ids, ["17439904366695445"])
+
+    def test_get_store_policy_returns_special_policy_for_ezarc_regions(self) -> None:
+        eu_policy = get_store_policy("EZARC EU-DE")
+        na_policy = get_store_policy("EZARC NA-US")
+
+        self.assertEqual(
+            eu_policy.notify_user_ids,
+            [
+                "17506435638027211",
+                "17585057805545058",
+                "17633432685584853",
+                "17800198373694159",
+                "17465848709312615",
+            ],
+        )
+        self.assertEqual(
+            na_policy.notify_user_ids,
+            [
+                "290435484624363486",
+                "01076420214327759759",
+                "454365106138190421",
+                "17427794048531392",
+                "17750084401515036",
+                "17403614178121993",
+            ],
+        )
+
+    def test_get_store_policy_returns_special_policy_for_yplus_jp(self) -> None:
+        policy = get_store_policy("YPLUS-JP-JP")
+
+        self.assertEqual(policy.alert_thresholds["a_fba_days"], 14)
+        self.assertIsNone(policy.alert_thresholds["a_fba_plus_days"])
+        self.assertEqual(policy.alert_thresholds["a_out_stock_days"], 40)
+        self.assertIsNone(policy.alert_thresholds["b_fba_days"])
+
+    def test_get_store_policy_returns_special_policy_for_yplus_us(self) -> None:
+        policy = get_store_policy("YPLUS-US-US")
+
+        self.assertEqual(policy.notify_user_ids, ["17441633442965653"])
+
+    def test_get_store_policy_returns_special_policy_for_yplus_eu(self) -> None:
+        policy = get_store_policy("YPLUS-EU-DE")
+
+        self.assertEqual(
+            policy.notify_user_ids,
+            ["23210537641286444", "350843032936428602"],
+        )
+
+    def test_get_store_policy_returns_special_policy_for_yplus_ca(self) -> None:
+        policy = get_store_policy("YPLUS-US-CA")
+
+        self.assertEqual(policy.notify_user_ids, ["395439341733212350"])
+
     def test_resolve_sid_list_adds_auto_include_store_sids(self) -> None:
         seller_map = {
             "1448": "Libraton EU-DE",

@@ -159,6 +159,20 @@ def ensure_child_folder(
     folder_name: str,
 ) -> dict[str, Any]:
     """在 parent 下确保有名为 folder_name 的子文件夹，存在则复用。"""
+    existing = find_child_folder(
+        access_token,
+        space_id=space_id,
+        union_id=union_id,
+        parent_id=parent_id,
+        name=folder_name,
+    )
+    if existing:
+        folder_id = str(existing.get("id") or existing.get("uuid") or existing.get("dentryUuid") or "")
+        if not folder_id:
+            raise RuntimeError(f"existing child folder missing id: {existing}")
+        print(f"[dingpan] 复用已存在子文件夹: {folder_name} ({folder_id})")
+        return {"id": folder_id, "name": folder_name, "created": False, "dentry": existing}
+
     try:
         created = create_folder(
             access_token,
@@ -174,20 +188,6 @@ def ensure_child_folder(
             return {"id": folder_id, "name": folder_name, "created": True, "dentry": dentry}
     except Exception as exc:
         print(f"[dingpan] 创建子文件夹失败，回退查找: {exc}")
-
-    existing = find_child_folder(
-        access_token,
-        space_id=space_id,
-        union_id=union_id,
-        parent_id=parent_id,
-        name=folder_name,
-    )
-    if existing:
-        folder_id = str(existing.get("id") or existing.get("uuid") or existing.get("dentryUuid") or "")
-        if not folder_id:
-            raise RuntimeError(f"existing child folder missing id: {existing}")
-        print(f"[dingpan] 复用已存在子文件夹: {folder_name} ({folder_id})")
-        return {"id": folder_id, "name": folder_name, "created": False, "dentry": existing}
     raise RuntimeError(f"unable to ensure child folder: {folder_name}")
 
 

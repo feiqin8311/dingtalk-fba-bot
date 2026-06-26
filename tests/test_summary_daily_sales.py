@@ -15,6 +15,72 @@ from tests.factories import make_summary_item
 
 
 class SummaryDailySalesTests(unittest.TestCase):
+    def test_classify_record_prefers_primary_msku_over_m_suffix_variant(self) -> None:
+        item = make_summary_item(hash_id="hash-msku-pair", sid="1423", msku="801105")
+        item["basic_info"]["msku_fnsku_list"] = [{"msku": "801105"}, {"msku": "801105-M"}]
+
+        record = classify_record(item, date(2026, 6, 22), {"1423": "EZARC NA-CA"}, {"1423"})
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.mskus, ["801105"])
+
+    def test_classify_record_trims_trailing_comma_from_msku(self) -> None:
+        item = make_summary_item(hash_id="hash-msku-comma", sid="1423", msku="802022N,")
+
+        record = classify_record(item, date(2026, 6, 22), {"1423": "EZARC NA-CA"}, {"1423"})
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.mskus, ["802022N"])
+
+    def test_export_alert_report_can_skip_store_subreports(self) -> None:
+        item = make_summary_item(hash_id="hash-store-a", msku="MSKU-A")
+        record = classify_record(item, date(2026, 4, 7), {"1448": "店铺A"}, {"1448"})
+        assert record is not None
+
+        with TemporaryDirectory() as tmp_dir:
+            report_path = export_alert_report(
+                [record],
+                date(2026, 4, 7),
+                output_dir=tmp_dir,
+                include_store_reports=False,
+                main_report_name="EZARC库存预警测试",
+            )
+
+            self.assertEqual(
+                Path(report_path),
+                Path(tmp_dir) / "2026-04-07" / "EZARC库存预警测试-20260407.xlsx",
+            )
+            self.assertFalse((Path(tmp_dir) / "2026-04-07" / "店铺A").exists())
+
+    def test_export_alert_report_can_skip_store_subreports_for_yplus(self) -> None:
+        item = make_summary_item(
+            hash_id="hash-store-yplus",
+            sid="2344",
+            msku="MSKU-YPLUS",
+            fba_plus_days=45,
+            fba_days=14,
+            out_stock_date="2026-05-12",
+        )
+        record = classify_record(item, date(2026, 4, 7), {"2344": "YPLUS-US-US"}, {"2344"})
+        assert record is not None
+
+        with TemporaryDirectory() as tmp_dir:
+            report_path = export_alert_report(
+                [record],
+                date(2026, 4, 7),
+                output_dir=tmp_dir,
+                include_store_reports=False,
+                main_report_name="YPLUS库存预警测试",
+            )
+
+            self.assertEqual(
+                Path(report_path),
+                Path(tmp_dir) / "2026-04-07" / "YPLUS库存预警测试-20260407.xlsx",
+            )
+            self.assertFalse((Path(tmp_dir) / "2026-04-07" / "YPLUS-US-US").exists())
+
     def test_classify_record_uses_libraton_jp_jp_a_level_thresholds(self) -> None:
         item = {
             "basic_info": {
@@ -75,6 +141,36 @@ class SummaryDailySalesTests(unittest.TestCase):
         }
 
         record = classify_record(item, date(2026, 4, 7), {"1457": "Libraton JP-JP"}, {"1457"})
+
+        self.assertIsNone(record)
+
+    def test_classify_record_does_not_create_b_level_for_yplus_jp_jp(self) -> None:
+        item = {
+            "basic_info": {
+                "asin": "B2351B",
+                "hash_id": "hash-2351-b",
+                "sid": "2351",
+                "node_type": 1,
+                "msku_fnsku_list": [{"msku": "MSKU-2351-B"}],
+            },
+            "suggest_info": {
+                "fba_available_sale_days": 70,
+                "available_sale_days_fba": 30,
+                "out_stock_date": "2026-06-06",
+            },
+            "data": {
+                "amazon_quantity_info": {
+                    "amazon_quantity_valid": 10,
+                    "amazon_quantity_shipping": 0,
+                    "afn_fulfillable_quantity": 8,
+                    "reserved_fc_transfers": 1,
+                    "reserved_fc_processing": 1,
+                }
+            },
+            "ext_info": {"restock_status": 0},
+        }
+
+        record = classify_record(item, date(2026, 4, 7), {"2351": "YPLUS-JP-JP"}, {"2351"})
 
         self.assertIsNone(record)
 
@@ -173,6 +269,114 @@ class SummaryDailySalesTests(unittest.TestCase):
         record = classify_record(item, date(2026, 4, 21), {"1443": "Libraton NA-US"}, {"1443"})
 
         self.assertIsNone(record)
+
+    def test_classify_record_uses_libraton_eu_new_thresholds(self) -> None:
+        item = {
+            "basic_info": {
+                "asin": "B1448A",
+                "hash_id": "hash-1448-a",
+                "sid": "1448",
+                "node_type": 1,
+                "msku_fnsku_list": [{"msku": "MSKU-1448-A"}],
+            },
+            "suggest_info": {
+                "fba_available_sale_days": 65,
+                "available_sale_days_fba": 20,
+                "out_stock_date": "2026-06-11",
+            },
+            "data": {
+                "amazon_quantity_info": {
+                    "amazon_quantity_valid": 10,
+                    "amazon_quantity_shipping": 5,
+                    "afn_fulfillable_quantity": 8,
+                    "reserved_fc_transfers": 1,
+                    "reserved_fc_processing": 1,
+                }
+            },
+            "ext_info": {"restock_status": 0},
+        }
+
+        record = classify_record(item, date(2026, 4, 7), {"1448": "Libraton EU-DE"}, {"1448"})
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.level, "A")
+        self.assertEqual(record.reasons, ["可售天数(FBA+在途)=65天", "断货时间(天数)=65天"])
+
+    def test_classify_record_does_not_use_equal_out_stock_b_rule_for_libraton_eu(self) -> None:
+        item = {
+            "basic_info": {
+                "asin": "B1448B",
+                "hash_id": "hash-1448-b",
+                "sid": "1448",
+                "node_type": 1,
+                "msku_fnsku_list": [{"msku": "MSKU-1448-B"}],
+            },
+            "suggest_info": {
+                "fba_available_sale_days": 100,
+                "available_sale_days_fba": 60,
+                "out_stock_date": "2026-06-20",
+            },
+            "data": {
+                "amazon_quantity_info": {
+                    "amazon_quantity_valid": 10,
+                    "amazon_quantity_shipping": 5,
+                    "afn_fulfillable_quantity": 8,
+                    "reserved_fc_transfers": 1,
+                    "reserved_fc_processing": 1,
+                }
+            },
+            "ext_info": {"restock_status": 0},
+        }
+
+        record = classify_record(item, date(2026, 4, 7), {"1448": "Libraton EU-DE"}, {"1448"})
+
+        self.assertIsNone(record)
+
+    def test_classify_record_prefers_summary_fields_when_present(self) -> None:
+        item = {
+            "basic_info": {
+                "asin": "B-SNAPSHOT-A",
+                "hash_id": "hash-snapshot-a",
+                "sid": "1448",
+                "node_type": 1,
+                "msku_fnsku_list": [{"msku": "MSKU-SNAPSHOT-A"}],
+            },
+            "suggest_info": {
+                "fba_available_sale_days": 50,
+                "available_sale_days_fba": 6,
+                "out_stock_date": "2026-04-20",
+                "estimated_sale_avg_quantity": 1,
+            },
+            "data": {
+                "amazon_quantity_info": {
+                    "amazon_quantity_valid": 999,
+                    "amazon_quantity_shipping": 999,
+                    "afn_fulfillable_quantity": 999,
+                    "reserved_fc_transfers": 0,
+                    "reserved_fc_processing": 0,
+                }
+            },
+            "ext_info": {"restock_status": 0},
+        }
+
+        record = classify_record(
+            item,
+            date(2026, 4, 7),
+            {"1448": "店铺A"},
+            {"1448"},
+            {("1448", "B-SNAPSHOT-A"): InventorySnapshot(8, 0, 0, 8, 0)},
+        )
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.level, "A")
+        self.assertEqual(record.fba_inventory, 999)
+        self.assertEqual(record.fba_inbound_inventory, 999)
+        self.assertEqual(record.fba_days, 6)
+        self.assertEqual(record.fba_plus_days, 50)
+        self.assertEqual(record.out_stock_days, 13)
+        self.assertEqual(record.reasons, ["可售天数(FBA)=6天", "可售天数(FBA+在途)=50天", "断货时间(天数)=13天"])
 
     def test_classify_record_marks_a_level_when_fba_days_is_14(self) -> None:
         item = {
@@ -373,7 +577,7 @@ class SummaryDailySalesTests(unittest.TestCase):
         )
         self.assertFalse(is_source_list_rate_limited_response({"code": 0, "msg": "success"}))
 
-    def test_parse_summary_items_can_create_c_level_from_source_list_values(self) -> None:
+    def test_parse_summary_items_can_create_c_level_from_source_list_values_when_summary_inventory_is_missing(self) -> None:
         item = {
             "basic_info": {
                 "asin": "B001",
@@ -394,11 +598,11 @@ class SummaryDailySalesTests(unittest.TestCase):
             },
             "data": {
                 "amazon_quantity_info": {
-                    "amazon_quantity_valid": 5,
-                    "amazon_quantity_shipping": 0,
-                    "afn_fulfillable_quantity": 5,
-                    "reserved_fc_transfers": 0,
-                    "reserved_fc_processing": 0,
+                    "amazon_quantity_valid": None,
+                    "amazon_quantity_shipping": None,
+                    "afn_fulfillable_quantity": None,
+                    "reserved_fc_transfers": None,
+                    "reserved_fc_processing": None,
                 }
             },
             "ext_info": {"restock_status": 0},

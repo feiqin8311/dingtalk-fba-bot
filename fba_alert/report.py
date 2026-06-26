@@ -86,8 +86,8 @@ def build_date_report_dir(today: date, output_dir: str) -> Path:
     return Path(output_dir) / today.isoformat()
 
 
-def build_main_report_path(today: date, output_dir: str) -> Path:
-    return build_date_report_dir(today, output_dir) / f"LIBRATON库存预警-{today.strftime('%Y%m%d')}.xlsx"
+def build_main_report_path(today: date, output_dir: str, report_name: str = "LIBRATON库存预警") -> Path:
+    return build_date_report_dir(today, output_dir) / f"{report_name}-{today.strftime('%Y%m%d')}.xlsx"
 
 
 def build_store_report_file_label(store_name: str) -> str:
@@ -153,19 +153,27 @@ def write_multi_sheet_report_workbook(rows_by_store: dict[str, list[dict]], file
     workbook.save(file_path)
 
 
-def export_alert_report(alerts: list[AlertRecord], today: date, output_dir: str = "reports") -> str:
+def export_alert_report(
+    alerts: list[AlertRecord],
+    today: date,
+    output_dir: str = "reports",
+    *,
+    include_store_reports: bool = True,
+    main_report_name: str = "LIBRATON库存预警",
+) -> str:
     rows = build_report_rows(alerts)
     rows_by_store = group_rows_by_store(rows)
-    rows_by_store_report = group_rows_by_store_report(rows)
     date_dir = build_date_report_dir(today, output_dir)
     date_dir.mkdir(parents=True, exist_ok=True)
-    file_path = build_main_report_path(today, output_dir)
+    file_path = build_main_report_path(today, output_dir, main_report_name)
     write_multi_sheet_report_workbook(rows_by_store, file_path)
 
-    for store_name, store_rows in rows_by_store_report.items():
-        store_file_path = build_store_report_path(store_name, today, output_dir)
-        store_file_path.parent.mkdir(parents=True, exist_ok=True)
-        write_report_workbook(store_rows, store_file_path)
+    if include_store_reports:
+        rows_by_store_report = group_rows_by_store_report(rows)
+        for store_name, store_rows in rows_by_store_report.items():
+            store_file_path = build_store_report_path(store_name, today, output_dir)
+            store_file_path.parent.mkdir(parents=True, exist_ok=True)
+            write_report_workbook(store_rows, store_file_path)
 
     return str(file_path)
 
