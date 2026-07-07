@@ -10,6 +10,8 @@ class AlertScope(str, Enum):
     CA = "ca"
     JP = "jp"
     EU = "eu"
+    EZARC = "ezarc"
+    YPLUS = "yplus"
     EZARC_TEST = "ezarc-test"
     YPLUS_TEST = "yplus-test"
 
@@ -22,45 +24,49 @@ class AlertScope(str, Enum):
             raise ValueError(f"unsupported alert scope: {value}") from exc
 
 
+EZARC_SELLER_NAMES = {
+    "EZARC EU-BE",
+    "EZARC EU-DE",
+    "EZARC EU-ES",
+    "EZARC EU-FR",
+    "EZARC EU-IE",
+    "EZARC EU-IT",
+    "EZARC EU-NL",
+    "EZARC EU-PL",
+    "EZARC EU-SE",
+    "EZARC EU-TR",
+    "EZARC EU-UK",
+    "EZARC NA-US",
+    "EZARC NA-CA",
+    "EZARC JP-JP",
+    "CBT-F Tools-JP",
+}
+YPLUS_SELLER_NAMES = {
+    "YPLUS-EU-BE",
+    "YPLUS-EU-DE",
+    "YPLUS-EU-ES",
+    "YPLUS-EU-FR",
+    "YPLUS-EU-IE",
+    "YPLUS-EU-IT",
+    "YPLUS-EU-NL",
+    "YPLUS-EU-PL",
+    "YPLUS-EU-SE",
+    "YPLUS-EU-TR",
+    "YPLUS-EU-UK",
+    "YPLUS-US-US",
+    "YPLUS-US-CA",
+    "TrailFun-US",
+    "YPLUS-JP-JP",
+}
 SCOPE_SELLER_NAMES = {
     AlertScope.US: {"Libraton NA-US"},
     AlertScope.CA: {"Libraton NA-CA"},
     AlertScope.JP: {"Libraton JP-JP"},
     AlertScope.EU: {"Libraton EU-DE", "Libraton EU-UK"},
-    AlertScope.EZARC_TEST: {
-        "EZARC EU-BE",
-        "EZARC EU-DE",
-        "EZARC EU-ES",
-        "EZARC EU-FR",
-        "EZARC EU-IE",
-        "EZARC EU-IT",
-        "EZARC EU-NL",
-        "EZARC EU-PL",
-        "EZARC EU-SE",
-        "EZARC EU-TR",
-        "EZARC EU-UK",
-        "EZARC NA-US",
-        "EZARC NA-CA",
-        "EZARC JP-JP",
-        "CBT-F Tools-JP",
-    },
-    AlertScope.YPLUS_TEST: {
-        "YPLUS-EU-BE",
-        "YPLUS-EU-DE",
-        "YPLUS-EU-ES",
-        "YPLUS-EU-FR",
-        "YPLUS-EU-IE",
-        "YPLUS-EU-IT",
-        "YPLUS-EU-NL",
-        "YPLUS-EU-PL",
-        "YPLUS-EU-SE",
-        "YPLUS-EU-TR",
-        "YPLUS-EU-UK",
-        "YPLUS-US-US",
-        "YPLUS-US-CA",
-        "TrailFun-US",
-        "YPLUS-JP-JP",
-    },
+    AlertScope.EZARC: EZARC_SELLER_NAMES,
+    AlertScope.EZARC_TEST: EZARC_SELLER_NAMES,
+    AlertScope.YPLUS: YPLUS_SELLER_NAMES,
+    AlertScope.YPLUS_TEST: YPLUS_SELLER_NAMES,
 }
 SCOPE_REPORT_GROUP_NAMES = {
     AlertScope.US: "Libraton NA-US",

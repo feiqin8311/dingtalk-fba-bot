@@ -24,4 +24,5 @@ class AlertRecord:
     summary_daily_sales: float
     out_stock_date: str
     out_stock_days: int
+    restock_status: int | None
     hash_id: str

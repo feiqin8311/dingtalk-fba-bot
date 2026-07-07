@@ -51,7 +51,9 @@ def aggregate_inventory_snapshot(type_1_rows: list[dict], type_2_rows: list[dict
     fba_sellable_inventory = 0
     fba_transfer_reserved_inventory = 0
     fba_processing_inventory = 0
+    fba_inventory = 0
     for row in type_1_rows:
+        fba_inventory += safe_int(row.get("quantity"))
         remark = row.get("remark") or {}
         fba_sellable_inventory += safe_int(remark.get("afn_fulfillable_quantity"))
         fba_transfer_reserved_inventory += safe_int(remark.get("reserved_fc_transfers"))
@@ -62,7 +64,7 @@ def aggregate_inventory_snapshot(type_1_rows: list[dict], type_2_rows: list[dict
         fba_sellable_inventory=fba_sellable_inventory,
         fba_transfer_reserved_inventory=fba_transfer_reserved_inventory,
         fba_processing_inventory=fba_processing_inventory,
-        fba_inventory=fba_sellable_inventory + fba_transfer_reserved_inventory + fba_processing_inventory,
+        fba_inventory=fba_inventory,
         fba_inbound_inventory=fba_inbound_inventory,
     )
 
@@ -92,6 +94,12 @@ def is_transient_connection_error_response(resp: dict) -> bool:
         "illegalreferencecountexception",
     )
     return any(marker in haystack for marker in transient_markers for haystack in haystacks)
+
+
+def is_access_token_mismatch_response(resp: dict) -> bool:
+    code = str(resp.get("code") or "").strip()
+    message = str(resp.get("msg") or resp.get("message") or "").strip().lower()
+    return code == "2001005" and "access token not match" in message
 
 
 def is_source_list_rate_limited_response(resp: dict) -> bool:
@@ -299,9 +307,10 @@ class LingxingClient:
         **kwargs: Any,
     ) -> dict:
         resp: dict = {}
+        current_access_token = access_token
         for attempt in range(1, retries + 1):
             resp = await self.request(
-                access_token,
+                current_access_token,
                 route_name,
                 method,
                 req_params=req_params,
@@ -310,6 +319,11 @@ class LingxingClient:
             )
             if safe_int(resp.get("code")) == 0:
                 return resp
+            if is_access_token_mismatch_response(resp) and attempt < retries:
+                print("[lingxing] access_token 失效，重新获取后重试")
+                current_access_token = await self.fetch_access_token()
+                await asyncio.sleep(1)
+                continue
             if (is_rate_limited_response(resp) or is_transient_connection_error_response(resp)) and attempt < retries:
                 await asyncio.sleep(attempt)
                 continue

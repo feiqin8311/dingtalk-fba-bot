@@ -104,6 +104,38 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows, [{"basic_info": {"asin": "B001"}}])
         self.assertEqual(calls, 2)
 
+    async def test_fetch_summary_items_refreshes_token_on_mismatch(self) -> None:
+        client = LingxingClient(make_config())
+        calls: list[str] = []
+
+        async def fake_fetch_access_token() -> str:
+            return "new-token"
+
+        async def fake_request(
+            access_token: str,
+            route_name: str,
+            method: str,
+            req_params: dict | None = None,
+            req_body: dict | None = None,
+            **kwargs: object,
+        ) -> dict:
+            calls.append(access_token)
+            if len(calls) == 1:
+                return {"code": "2001005", "msg": " access token not match", "data": None}
+            return {
+                "code": 0,
+                "data": [{"basic_info": {"asin": "B001"}}],
+                "total": 1,
+            }
+
+        client.fetch_access_token = fake_fetch_access_token  # type: ignore[method-assign]
+        client.request = fake_request  # type: ignore[method-assign]
+
+        rows = await client.fetch_summary_items("old-token", ["1448"])
+
+        self.assertEqual(rows, [{"basic_info": {"asin": "B001"}}])
+        self.assertEqual(calls, ["old-token", "new-token"])
+
     async def test_fetch_summary_items_can_override_data_type(self) -> None:
         client = LingxingClient(make_config())
         request_bodies: list[dict] = []
@@ -244,7 +276,16 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
             in_flight -= 1
             if source_type == "1":
-                return [{"remark": {"afn_fulfillable_quantity": 1, "reserved_fc_transfers": 2, "reserved_fc_processing": 3}}]
+                return [
+                    {
+                        "quantity": 6,
+                        "remark": {
+                            "afn_fulfillable_quantity": 1,
+                            "reserved_fc_transfers": 2,
+                            "reserved_fc_processing": 3,
+                        },
+                    }
+                ]
             return [{"quantity": 4}]
 
         client.fetch_source_list = fake_fetch_source_list  # type: ignore[method-assign]
@@ -270,7 +311,16 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.01)
             in_flight -= 1
             if source_type == "1":
-                return [{"remark": {"afn_fulfillable_quantity": 1, "reserved_fc_transfers": 2, "reserved_fc_processing": 3}}]
+                return [
+                    {
+                        "quantity": 6,
+                        "remark": {
+                            "afn_fulfillable_quantity": 1,
+                            "reserved_fc_transfers": 2,
+                            "reserved_fc_processing": 3,
+                        },
+                    }
+                ]
             return [{"quantity": 4}]
 
         client.fetch_source_list = fake_fetch_source_list  # type: ignore[method-assign]
@@ -302,7 +352,16 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
                         {"code": "3001008", "msg": "new requests too frequently. please request later.", "data": None}
                     )
                 if source_type == "1":
-                    return [{"remark": {"afn_fulfillable_quantity": 1, "reserved_fc_transfers": 2, "reserved_fc_processing": 3}}]
+                    return [
+                        {
+                            "quantity": 6,
+                            "remark": {
+                                "afn_fulfillable_quantity": 1,
+                                "reserved_fc_transfers": 2,
+                                "reserved_fc_processing": 3,
+                            },
+                        }
+                    ]
                 return [{"quantity": 4}]
             finally:
                 current_in_flight -= 1

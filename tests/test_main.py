@@ -67,6 +67,17 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ParseArgsTests(unittest.TestCase):
+    def test_parse_args_accepts_brand_scopes(self) -> None:
+        from fba_alert.main import parse_args
+
+        with patch.object(sys, "argv", ["prog", "--scope", "ezarc"]):
+            ezarc_args = parse_args()
+        with patch.object(sys, "argv", ["prog", "--scope", "yplus"]):
+            yplus_args = parse_args()
+
+        self.assertEqual(ezarc_args.scope, "ezarc")
+        self.assertEqual(yplus_args.scope, "yplus")
+
     def test_parse_args_reads_notify_user_id_override(self) -> None:
         from fba_alert.main import parse_args
 

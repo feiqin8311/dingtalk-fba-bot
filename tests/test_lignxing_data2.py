@@ -5,7 +5,23 @@ import unittest
 from pathlib import Path
 
 
+FBA_ALERT_MODULE_NAMES = ("fba_alert", "fba_alert.config", "fba_alert.lingxing", "fba_alert.utils")
+
+
+def snapshot_modules() -> dict[str, object]:
+    return {name: sys.modules.get(name) for name in FBA_ALERT_MODULE_NAMES}
+
+
+def restore_modules(snapshot: dict[str, object]) -> None:
+    for name, module in snapshot.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
 def load_script_module():
+    snapshot = snapshot_modules()
     sys.modules.pop("fba_alert", None)
     sys.modules.pop("fba_alert.config", None)
     sys.modules.pop("fba_alert.lingxing", None)
@@ -33,11 +49,15 @@ def load_script_module():
     spec = importlib.util.spec_from_file_location("lignxing_data2", script_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        restore_modules(snapshot)
 
 
 def load_summary_script_module():
+    snapshot = snapshot_modules()
     sys.modules.pop("fba_alert", None)
     sys.modules.pop("fba_alert.config", None)
     sys.modules.pop("fba_alert.lingxing", None)
@@ -65,8 +85,11 @@ def load_summary_script_module():
     spec = importlib.util.spec_from_file_location("lignxing_data", script_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        restore_modules(snapshot)
 
 
 class LingxingData2Tests(unittest.TestCase):

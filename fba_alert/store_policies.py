@@ -48,127 +48,127 @@ EZARC_NA_USER_IDS = [
 EZARC_JP_USER_IDS = ["17439904366695445"]
 
 STORE_POLICIES = {
-    "EZARC EU-BE": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-DE": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-ES": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-FR": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-IE": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-IT": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-NL": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-PL": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-SE": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-TR": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
-    "EZARC EU-UK": StorePolicy(
-        alert_thresholds={
-            "a_fba_days": 14,
-            "a_fba_plus_days": 65,
-            "a_out_stock_days": 55,
-            "b_fba_days": 30,
-            "b_equal_out_stock_days": 60,
-            "b_fba_plus_days": 90,
-        },
-        notify_user_ids=EZARC_EU_USER_IDS,
-    ),
+	    "EZARC EU-BE": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-DE": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-ES": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-FR": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-IE": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-IT": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-NL": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-PL": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-SE": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-TR": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
+	    "EZARC EU-UK": StorePolicy(
+	        alert_thresholds={
+	            "a_fba_days": 14,
+	            "a_fba_plus_days": 65,
+	            "a_out_stock_days": 65,
+	            "b_fba_days": 30,
+	            "b_equal_out_stock_days": None,
+	            "b_fba_plus_days": 90,
+	        },
+	        notify_user_ids=EZARC_EU_USER_IDS,
+	    ),
     "EZARC NA-US": StorePolicy(
         alert_thresholds={
             "a_fba_days": 20,
@@ -192,6 +192,17 @@ STORE_POLICIES = {
         notify_user_ids=EZARC_NA_USER_IDS,
     ),
     "EZARC JP-JP": StorePolicy(
+        alert_thresholds={
+            "a_fba_days": 20,
+            "a_fba_plus_days": 30,
+            "a_out_stock_days": 50,
+            "b_fba_days": None,
+            "b_equal_out_stock_days": None,
+            "b_fba_plus_days": None,
+        },
+        notify_user_ids=EZARC_JP_USER_IDS,
+    ),
+    "EZARC JP 汇总": StorePolicy(
         alert_thresholds={
             "a_fba_days": 20,
             "a_fba_plus_days": 30,
@@ -387,7 +398,7 @@ STORE_POLICIES = {
             "b_equal_out_stock_days": 45,
             "b_fba_plus_days": 60,
         },
-        notify_user_ids=[],
+        notify_user_ids=["17441633442965653"],
     ),
     "YPLUS-US-CA": StorePolicy(
         alert_thresholds={

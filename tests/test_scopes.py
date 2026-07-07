@@ -9,6 +9,12 @@ class ScopeTests(unittest.TestCase):
 
         self.assertEqual(AlertScope.parse("all"), AlertScope.ALL)
 
+    def test_parse_brand_scopes(self) -> None:
+        from fba_alert.scopes import AlertScope
+
+        self.assertEqual(AlertScope.parse("ezarc"), AlertScope.EZARC)
+        self.assertEqual(AlertScope.parse("yplus"), AlertScope.YPLUS)
+
     def test_parse_rejects_unknown_scope(self) -> None:
         from fba_alert.scopes import AlertScope
 

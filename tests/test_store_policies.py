@@ -58,6 +58,11 @@ class StorePolicyTests(unittest.TestCase):
         self.assertIsNone(policy.alert_thresholds["b_fba_days"])
         self.assertEqual(policy.notify_user_ids, ["17439904366695445"])
 
+    def test_get_store_policy_returns_special_policy_for_ezarc_jp_summary(self) -> None:
+        policy = get_store_policy("EZARC JP 汇总")
+
+        self.assertEqual(policy.notify_user_ids, ["17439904366695445"])
+
     def test_get_store_policy_returns_special_policy_for_ezarc_regions(self) -> None:
         eu_policy = get_store_policy("EZARC EU-DE")
         na_policy = get_store_policy("EZARC NA-US")
@@ -84,6 +89,32 @@ class StorePolicyTests(unittest.TestCase):
             ],
         )
 
+    def test_get_store_policy_returns_requested_ezarc_eu_thresholds(self) -> None:
+        expected_thresholds = {
+            "a_fba_days": 14,
+            "a_fba_plus_days": 65,
+            "a_out_stock_days": 65,
+            "b_fba_days": 30,
+            "b_equal_out_stock_days": None,
+            "b_fba_plus_days": 90,
+        }
+
+        for seller_name in [
+            "EZARC EU-BE",
+            "EZARC EU-DE",
+            "EZARC EU-ES",
+            "EZARC EU-FR",
+            "EZARC EU-IE",
+            "EZARC EU-IT",
+            "EZARC EU-NL",
+            "EZARC EU-PL",
+            "EZARC EU-SE",
+            "EZARC EU-TR",
+            "EZARC EU-UK",
+        ]:
+            with self.subTest(seller_name=seller_name):
+                self.assertEqual(get_store_policy(seller_name).alert_thresholds, expected_thresholds)
+
     def test_get_store_policy_returns_special_policy_for_yplus_jp(self) -> None:
         policy = get_store_policy("YPLUS-JP-JP")
 
@@ -94,8 +125,10 @@ class StorePolicyTests(unittest.TestCase):
 
     def test_get_store_policy_returns_special_policy_for_yplus_us(self) -> None:
         policy = get_store_policy("YPLUS-US-US")
+        trailfun_policy = get_store_policy("TrailFun-US")
 
         self.assertEqual(policy.notify_user_ids, ["17441633442965653"])
+        self.assertEqual(trailfun_policy.notify_user_ids, ["17441633442965653"])
 
     def test_get_store_policy_returns_special_policy_for_yplus_eu(self) -> None:
         policy = get_store_policy("YPLUS-EU-DE")
@@ -143,6 +176,7 @@ class StorePolicyTests(unittest.TestCase):
                 summary_daily_sales=1.0,
                 out_stock_date=str(date(2026, 4, 20)),
                 out_stock_days=13,
+                restock_status=0,
                 hash_id="hash-1443",
             ),
             AlertRecord(
@@ -164,6 +198,7 @@ class StorePolicyTests(unittest.TestCase):
                 summary_daily_sales=1.0,
                 out_stock_date=str(date(2026, 4, 20)),
                 out_stock_days=13,
+                restock_status=0,
                 hash_id="hash-1457",
             ),
         ]

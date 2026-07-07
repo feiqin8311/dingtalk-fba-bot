@@ -11,12 +11,15 @@ from fba_alert.application import (
     build_dingpan_folder_route,
     count_sid_asin_pairs,
     ensure_dingpan_folder_route,
+    notify_store_reports,
     resolve_dingpan_route_parent_id,
     run_alert_job,
     upload_reports_to_dingpan,
 )
 from fba_alert.config import DingTalkConfig
 from fba_alert.lingxing import InventorySnapshot
+from fba_alert.models import AlertRecord
+from fba_alert.report import build_report_rows
 from fba_alert.scopes import AlertScope
 from tests.factories import make_summary_item
 
@@ -87,12 +90,17 @@ class FakeLingxingClient:
 class FakeNotifier:
     def __init__(self) -> None:
         self.sent: list[tuple[str, str]] = []
+        self.texts: list[tuple[str, str]] = []
 
     def get_access_token(self) -> str:
         return "token"
 
     def send_user_file(self, user_id: str, report_path: str) -> dict:
         self.sent.append((user_id, report_path))
+        return {"ok": True, "user_id": user_id}
+
+    def send_user_text(self, user_id: str, text: str) -> dict:
+        self.texts.append((user_id, text))
         return {"ok": True, "user_id": user_id}
 
 
@@ -335,10 +343,140 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(upload_calls, ["stale-folder", "fresh-folder"])
         self.assertEqual(preview_url_map[str(report_path)], "preview:28859011990:file-1")
 
+    def test_upload_reports_to_dingpan_includes_brand_store_reports(self) -> None:
+        from fba_alert import application
+        from fba_alert import dingpan
+
+        notifier = FakeNotifier()
+        config = DingTalkConfig(
+            api_base_url="https://api.dingtalk.com",
+            app_key="app-key",
+            app_secret="app-secret",
+            robot_code="robot-code",
+            user_ids=[],
+            dingpan_enabled=True,
+            dingpan_space_id="28859011990",
+            dingpan_parent_folder_id="221392062127",
+            dingpan_user_id="user-id",
+            dingpan_union_id="union-id",
+        )
+        alert = AlertRecord(
+            level="A",
+            reasons=["可售天数(FBA)=20天"],
+            asin="B-EZARC",
+            sid="1422",
+            seller_name="EZARC NA-US",
+            node_type=1,
+            mskus=["EZ-US"],
+            listing_contacts="",
+            fba_plus_days=60,
+            fba_days=20,
+            fba_inventory=8,
+            fba_inbound_inventory=1,
+            fba_sellable_inventory=1,
+            fba_transfer_reserved_inventory=10,
+            fba_processing_inventory=5,
+            summary_daily_sales=1.0,
+            out_stock_date="2026-05-12",
+            out_stock_days=20,
+            restock_status=0,
+            hash_id="hash-ezarc",
+        )
+
+        with TemporaryDirectory() as tmp_dir:
+            report_dir = Path(tmp_dir) / "reports" / "2026-04-21"
+            report_dir.mkdir(parents=True)
+            main_report_path = report_dir / "EZARC库存预警-20260421.xlsx"
+            store_report_path = report_dir / "EZARC NA-US" / "EZARC库存预警-EZARC NA-US-20260421.xlsx"
+            main_report_path.write_text("main", encoding="utf-8")
+            store_report_path.parent.mkdir()
+            store_report_path.write_text("store", encoding="utf-8")
+
+            upload_calls: list[str] = []
+            original_ensure_route = application.ensure_dingpan_folder_route
+            original_upload_file = dingpan.upload_file
+            original_extract_file_id = dingpan.extract_file_id
+            original_build_preview_url = dingpan.build_preview_url
+            try:
+                application.ensure_dingpan_folder_route = lambda *args, **kwargs: "folder-id"  # type: ignore[assignment]
+
+                def upload_file(*args, **kwargs):
+                    upload_calls.append(Path(kwargs["file_path"]).name)
+                    return {"commit": {"dentry": {"id": f"file-{len(upload_calls)}"}}}
+
+                dingpan.upload_file = upload_file  # type: ignore[assignment]
+                dingpan.extract_file_id = lambda commit: str((commit["dentry"])["id"])  # type: ignore[assignment]
+                dingpan.build_preview_url = lambda space_id, file_id: f"preview:{file_id}"  # type: ignore[assignment]
+
+                preview_url_map = upload_reports_to_dingpan(
+                    notifier,
+                    config,
+                    str(main_report_path),
+                    [alert],
+                    date(2026, 4, 21),
+                    AlertScope.EZARC,
+                )
+            finally:
+                application.ensure_dingpan_folder_route = original_ensure_route  # type: ignore[assignment]
+                dingpan.upload_file = original_upload_file  # type: ignore[assignment]
+                dingpan.extract_file_id = original_extract_file_id  # type: ignore[assignment]
+                dingpan.build_preview_url = original_build_preview_url  # type: ignore[assignment]
+
+        self.assertEqual(
+            upload_calls,
+            ["EZARC库存预警-20260421.xlsx", "EZARC库存预警-EZARC NA-US-20260421.xlsx"],
+        )
+        self.assertEqual(preview_url_map[str(store_report_path)], "preview:file-2")
+
+    def test_notify_store_reports_uses_brand_title_for_preview_links(self) -> None:
+        cases = [
+            ("EZARC库存预警", "EZARC NA-US", "1422", "B-EZARC", "EZARC 库存预警 - EZARC NA-US"),
+            ("YPLUS库存预警", "YPLUS-US-US", "2344", "B-YPLUS", "YPLUS 库存预警 - YPLUS-US-US"),
+        ]
+        for report_name, seller_name, sid, asin, title in cases:
+            with self.subTest(seller_name=seller_name):
+                alert = AlertRecord(
+                    level="A",
+                    reasons=["rule"],
+                    asin=asin,
+                    sid=sid,
+                    seller_name=seller_name,
+                    node_type=1,
+                    mskus=["MSKU"],
+                    listing_contacts="",
+                    fba_plus_days=0,
+                    fba_days=10,
+                    fba_inventory=1,
+                    fba_inbound_inventory=0,
+                    fba_sellable_inventory=1,
+                    fba_transfer_reserved_inventory=0,
+                    fba_processing_inventory=0,
+                    summary_daily_sales=1.0,
+                    out_stock_date="2026-05-12",
+                    out_stock_days=20,
+                    restock_status=0,
+                    hash_id=asin,
+                )
+                main_report = f"reports/2026-04-21/{report_name}-20260421.xlsx"
+                store_report = f"reports/2026-04-21/{seller_name}/{report_name}-{seller_name}-20260421.xlsx"
+                notifier = FakeNotifier()
+
+                notify_store_reports(
+                    main_report,
+                    [alert],
+                    date(2026, 4, 21),
+                    notifier,
+                    fallback_user_ids=["fallback-user"],
+                    dry_run=False,
+                    preview_url_map={store_report: "https://example.invalid/preview"},
+                )
+
+                self.assertIn(f"【{title}】", notifier.texts[0][1])
+
     def test_count_sid_asin_pairs_sums_unique_pairs(self) -> None:
         self.assertEqual(count_sid_asin_pairs({"1448": {"A1", "A2"}, "1444": {"B1"}}), 3)
 
-    def test_build_inventory_snapshot_candidate_sid_asin_map_limits_snapshot_candidates(self) -> None:
+    def test_build_inventory_snapshot_candidate_sid_asin_map_includes_scope_asins(self) -> None:
         alert_item = make_summary_item(asin="B001", hash_id="hash-alert", sid="1448", fba_days=6)
         low_stock_item = make_summary_item(
             asin="B002",
@@ -378,7 +516,7 @@ class ApplicationTests(unittest.TestCase):
             {"1448": "店铺A"},
         )
 
-        self.assertEqual(sid_asin_map, {"1448": {"B001", "B002"}})
+        self.assertEqual(sid_asin_map, {"1448": {"B001", "B002", "B003"}})
 
     def test_build_inventory_snapshot_candidate_sid_asin_map_keeps_allowed_jp_jp_asins(self) -> None:
         a_level_item = make_summary_item(
@@ -756,6 +894,222 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(result.sid_distribution, {"2344": 1})
         self.assertIn(("fetch_summary_items", (("2344", "2345", "2351", "6047"), None)), client.calls)
 
+    def test_run_alert_job_with_yplus_test_scope_keeps_restock_paused_items(self) -> None:
+        required_item = make_summary_item(
+            asin="B-YPLUS-JP-REQUIRED",
+            hash_id="hash-yplus-jp-required",
+            sid="2351",
+            msku="YP-JP-1",
+            fba_plus_days=45,
+            fba_days=14,
+            out_stock_date="2026-05-12",
+        )
+        required_us_item = make_summary_item(
+            asin="B-YPLUS-US-REQUIRED",
+            hash_id="hash-yplus-us-required",
+            sid="2344",
+            msku="YP-US-1",
+            fba_plus_days=45,
+            fba_days=14,
+            out_stock_date="2026-05-12",
+        )
+        skipped_item = make_summary_item(
+            asin="B-YPLUS-SKIPPED",
+            hash_id="hash-yplus-skipped",
+            sid="2351",
+            msku="YP-JP-2",
+            fba_plus_days=10,
+            fba_days=2,
+            out_stock_date="2026-04-23",
+        )
+        skipped_item["ext_info"]["restock_status"] = 1
+        skipped_us_item = make_summary_item(
+            asin="B-YPLUS-US-SKIPPED",
+            hash_id="hash-yplus-us-skipped",
+            sid="2344",
+            msku="YP-US-2",
+            fba_plus_days=10,
+            fba_days=2,
+            out_stock_date="2026-04-23",
+        )
+        skipped_us_item["ext_info"]["restock_status"] = 1
+        client = FakeLingxingClient(
+            seller_map={"2344": "YPLUS-US-US", "2351": "YPLUS-JP-JP"},
+            raw_items=[required_item, required_us_item, skipped_item, skipped_us_item],
+            inventory_snapshot_map={
+                ("2351", "B-YPLUS-JP-REQUIRED"): InventorySnapshot(8, 1, 1, 10, 5),
+                ("2344", "B-YPLUS-US-REQUIRED"): InventorySnapshot(8, 1, 1, 10, 5),
+            },
+            listing_items=[],
+        )
+
+        result = asyncio.run(
+            run_alert_job(
+                client=client,
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                scope="yplus-test",
+                dry_run=True,
+            )
+        )
+
+        self.assertEqual(result.sid_distribution, {"2351": 2, "2344": 2})
+        self.assertEqual(result.alert_count, 4)
+        self.assertIn(
+            (
+                "fetch_inventory_snapshot_map",
+                {
+                    "2351": {"B-YPLUS-JP-REQUIRED", "B-YPLUS-SKIPPED"},
+                    "2344": {"B-YPLUS-US-REQUIRED", "B-YPLUS-US-SKIPPED"},
+                },
+            ),
+            client.calls,
+        )
+
+    def test_run_alert_job_with_ezarc_test_scope_sends_to_store_policy_users(self) -> None:
+        item = make_summary_item(
+            asin="B-EZARC-US-SEND",
+            hash_id="hash-ezarc-us-send",
+            sid="1422",
+            msku="EZ-US-SEND",
+            fba_plus_days=60,
+            fba_days=20,
+            out_stock_date="2026-05-12",
+        )
+        client = FakeLingxingClient(
+            seller_map={"1422": "EZARC NA-US"},
+            raw_items=[item],
+            inventory_snapshot_map={("1422", "B-EZARC-US-SEND"): InventorySnapshot(8, 1, 1, 10, 5)},
+            listing_items=[],
+        )
+        notifier = FakeNotifier()
+
+        asyncio.run(
+            run_alert_job(
+                client=client,
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                exporter=lambda alerts, today, **kwargs: "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx",
+                notifier=notifier,
+                notify_user_ids=["fallback-user"],
+                scope="ezarc-test",
+            )
+        )
+
+        self.assertEqual(
+            notifier.sent,
+            [
+                ("290435484624363486", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("01076420214327759759", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("454365106138190421", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("17427794048531392", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("17750084401515036", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("17403614178121993", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
+                ("290435484624363486", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+                ("01076420214327759759", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+                ("454365106138190421", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+                ("17427794048531392", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+                ("17750084401515036", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+                ("17403614178121993", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
+            ],
+        )
+
+    def test_run_alert_job_with_yplus_test_scope_sends_to_store_policy_users(self) -> None:
+        item = make_summary_item(
+            asin="B-YPLUS-US-SEND",
+            hash_id="hash-yplus-us-send",
+            sid="2344",
+            msku="YP-US-SEND",
+            fba_plus_days=45,
+            fba_days=14,
+            out_stock_date="2026-05-12",
+        )
+        client = FakeLingxingClient(
+            seller_map={"2344": "YPLUS-US-US"},
+            raw_items=[item],
+            inventory_snapshot_map={("2344", "B-YPLUS-US-SEND"): InventorySnapshot(8, 1, 1, 10, 5)},
+            listing_items=[],
+        )
+        notifier = FakeNotifier()
+
+        asyncio.run(
+            run_alert_job(
+                client=client,
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                exporter=lambda alerts, today, **kwargs: "reports/2026-04-21/YPLUS库存预警测试-20260421.xlsx",
+                notifier=notifier,
+                notify_user_ids=["fallback-user"],
+                scope="yplus-test",
+            )
+        )
+
+        self.assertEqual(
+            notifier.sent,
+            [
+                ("17441633442965653", "reports/2026-04-21/YPLUS库存预警测试-20260421.xlsx"),
+                ("17441633442965653", "reports/2026-04-21/YPLUS-US-US/YPLUS库存预警测试-YPLUS-US-US-20260421.xlsx"),
+            ],
+        )
+
+    def test_run_alert_job_with_formal_brand_scopes_uses_formal_report_names(self) -> None:
+        ezarc_item = make_summary_item(
+            asin="B-EZARC-FORMAL",
+            hash_id="hash-ezarc-formal",
+            sid="1422",
+            msku="EZ-FORMAL",
+            fba_plus_days=60,
+            fba_days=20,
+            out_stock_date="2026-05-12",
+        )
+        yplus_item = make_summary_item(
+            asin="B-YPLUS-FORMAL",
+            hash_id="hash-yplus-formal",
+            sid="2344",
+            msku="YP-FORMAL",
+            fba_plus_days=45,
+            fba_days=14,
+            out_stock_date="2026-05-12",
+        )
+        calls: list[tuple[str, bool]] = []
+
+        def export_report(alerts: list[object], today: date, **kwargs: object) -> str:
+            calls.append((str(kwargs["main_report_name"]), bool(kwargs["include_store_reports"])))
+            return f"reports/2026-04-21/{kwargs['main_report_name']}-20260421.xlsx"
+
+        asyncio.run(
+            run_alert_job(
+                client=FakeLingxingClient(
+                    seller_map={"1422": "EZARC NA-US"},
+                    raw_items=[ezarc_item],
+                    inventory_snapshot_map={("1422", "B-EZARC-FORMAL"): InventorySnapshot(8, 1, 1, 10, 5)},
+                    listing_items=[],
+                ),
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                exporter=export_report,
+                scope="ezarc",
+                dry_run=True,
+            )
+        )
+        asyncio.run(
+            run_alert_job(
+                client=FakeLingxingClient(
+                    seller_map={"2344": "YPLUS-US-US"},
+                    raw_items=[yplus_item],
+                    inventory_snapshot_map={("2344", "B-YPLUS-FORMAL"): InventorySnapshot(8, 1, 1, 10, 5)},
+                    listing_items=[],
+                ),
+                today=date(2026, 4, 21),
+                sid_list=["1448"],
+                exporter=export_report,
+                scope="yplus",
+                dry_run=True,
+            )
+        )
+
+        self.assertEqual(calls, [("EZARC库存预警", True), ("YPLUS库存预警", True)])
+
     def test_run_alert_job_with_us_scope_does_not_send_main_report(self) -> None:
         item = make_summary_item(
             asin="B-US",
@@ -858,9 +1212,9 @@ class ApplicationTests(unittest.TestCase):
 
         self.assertEqual(notifier.sent, [])
 
-    def test_run_alert_job_with_ezarc_test_merges_jp_rows_by_msku(self) -> None:
+    def test_run_alert_job_with_ezarc_test_merges_jp_rows_by_asin(self) -> None:
         ezarc_item = make_summary_item(
-            asin="JP-1A",
+            asin="JP-1",
             hash_id="hash-jp-a",
             sid="2002",
             msku="JP-SKU-1",
@@ -875,10 +1229,10 @@ class ApplicationTests(unittest.TestCase):
             reserved_fc_processing=0,
         )
         cbt_item = make_summary_item(
-            asin="JP-1B",
+            asin="JP-1",
             hash_id="hash-jp-b",
             sid="2003",
-            msku="JP-SKU-1",
+            msku="JP-SKU-1S",
             fba_plus_days=9,
             fba_days=9,
             out_stock_date="2026-04-16",
@@ -893,8 +1247,8 @@ class ApplicationTests(unittest.TestCase):
             seller_map={"2002": "EZARC JP-JP", "2003": "CBT-F Tools-JP"},
             raw_items=[ezarc_item, cbt_item],
             inventory_snapshot_map={
-                ("2002", "JP-1A"): InventorySnapshot(0, 0, 0, 0, 250),
-                ("2003", "JP-1B"): InventorySnapshot(0, 0, 0, 0, 0),
+                ("2002", "JP-1"): InventorySnapshot(0, 0, 0, 0, 250),
+                ("2003", "JP-1"): InventorySnapshot(14, 0, 0, 14, 0),
             },
             listing_items=[],
         )
@@ -917,12 +1271,64 @@ class ApplicationTests(unittest.TestCase):
 
         self.assertEqual(len(exported[0]), 1)
         self.assertEqual(exported[0][0].seller_name, "EZARC JP 汇总")
-        self.assertEqual(exported[0][0].mskus, ["JP-SKU-1"])
-        self.assertEqual(exported[0][0].level, "C")
-        self.assertEqual(exported[0][0].fba_inventory, 0)
+        self.assertEqual(exported[0][0].asin, "JP-1")
+        self.assertEqual(exported[0][0].mskus, ["JP-SKU-1", "JP-SKU-1S"])
+        self.assertEqual(exported[0][0].level, "A")
+        self.assertEqual(exported[0][0].fba_inventory, 14)
         self.assertEqual(exported[0][0].fba_inbound_inventory, 250)
         self.assertEqual(exported[0][0].summary_daily_sales, 2.63)
-        self.assertIn(("fetch_inventory_snapshot_map", {"2002": {"JP-1A"}, "2003": {"JP-1B"}}), client.calls)
+        self.assertEqual(
+            build_report_rows(exported[0]),
+            [
+                {
+                    "店铺": "EZARC JP 汇总",
+                    "等级": "A",
+                    "MSKU": "JP-SKU-1、JP-SKU-1S",
+                    "ASIN": "JP-1",
+                    "Listing联系人": "",
+                    "命中条数": 2,
+                    "命中规则": "可售天数(FBA)=5天；断货时间(天数)=5天",
+                    "日均销量": 2.63,
+                    "FBA库存": 14,
+                    "可售天数(FBA)": 5,
+                    "FBA在途": 250,
+                    "可售天数(FBA+在途)": 100,
+                    "断货时间": "2026-04-12",
+                    "断货天数": 5,
+                    "FBA可售-可售": 14,
+                    "FBA可售-待调仓": 0,
+                    "FBA可售-调仓中": 0,
+                    "补货状态": "正常补货",
+                }
+            ],
+        )
+        self.assertIn(("fetch_inventory_snapshot_map", {"2002": {"JP-1"}, "2003": {"JP-1"}}), client.calls)
+
+        formal_client = FakeLingxingClient(
+            seller_map={"2002": "EZARC JP-JP", "2003": "CBT-F Tools-JP"},
+            raw_items=[ezarc_item, cbt_item],
+            inventory_snapshot_map={
+                ("2002", "JP-1"): InventorySnapshot(0, 0, 0, 0, 250),
+                ("2003", "JP-1"): InventorySnapshot(14, 0, 0, 14, 0),
+            },
+            listing_items=[],
+        )
+        formal_exported: list[list[object]] = []
+
+        asyncio.run(
+            run_alert_job(
+                client=formal_client,
+                today=date(2026, 4, 7),
+                sid_list=["2002", "2003"],
+                exporter=lambda alerts, today: formal_exported.append(alerts) or "reports/2026-04-07/EZARC库存预警-20260407.xlsx",
+                scope="ezarc",
+                dry_run=True,
+            )
+        )
+
+        self.assertEqual(len(formal_exported[0]), 1)
+        self.assertEqual(formal_exported[0][0].seller_name, "EZARC JP 汇总")
+        self.assertEqual(formal_exported[0][0].mskus, ["JP-SKU-1", "JP-SKU-1S"])
 
     def test_run_alert_job_with_eu_scope_returns_combined_eu_report(self) -> None:
         uk_item = make_summary_item(
@@ -1057,7 +1463,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertIn(("fetch_summary_items", (("1443",), 1)), client.calls)
         self.assertIn(("fetch_summary_items", (("2001",), None)), client.calls)
 
-    def test_run_alert_job_fetches_inventory_snapshot_only_for_candidates(self) -> None:
+    def test_run_alert_job_fetches_inventory_snapshot_for_scope_asins(self) -> None:
         alert_item = make_summary_item(asin="B001", hash_id="hash-alert", sid="1448", fba_days=6)
         c_level_candidate_item = make_summary_item(
             asin="B002",
@@ -1101,7 +1507,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertIn(("fetch_inventory_snapshot_map", {"1448": {"B001", "B002"}}), client.calls)
+        self.assertIn(("fetch_inventory_snapshot_map", {"1448": {"B001", "B002", "B003"}}), client.calls)
 
     def test_run_alert_job_uses_inventory_snapshot_when_summary_inventory_fields_are_missing(self) -> None:
         item = make_summary_item(

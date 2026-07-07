@@ -270,6 +270,26 @@ class SummaryDailySalesTests(unittest.TestCase):
 
         self.assertIsNone(record)
 
+    def test_classify_record_uses_ezarc_eu_out_stock_65_as_a_level(self) -> None:
+        item = make_summary_item(
+            asin="BEZARCEU65",
+            hash_id="hash-ezarc-eu-65",
+            sid="1429",
+            msku="MSKU-EZARC-EU-65",
+            fba_plus_days=100,
+            fba_days=60,
+            out_stock_date="2026-06-06",
+            amazon_quantity_valid=10,
+            amazon_quantity_shipping=0,
+        )
+
+        record = classify_record(item, date(2026, 4, 7), {"1429": "EZARC EU-DE"}, {"1429"})
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.level, "A")
+        self.assertEqual(record.reasons, ["断货时间(天数)=60天"])
+
     def test_classify_record_uses_libraton_eu_new_thresholds(self) -> None:
         item = {
             "basic_info": {
@@ -534,15 +554,19 @@ class SummaryDailySalesTests(unittest.TestCase):
     def test_aggregate_inventory_snapshot_sums_type_1_and_type_2_values(self) -> None:
         type_1_rows = [
             {
+                "quantity": "6",
                 "remark": {
                     "afn_fulfillable_quantity": "3",
+                    "afn_reserved_quantity": "3",
                     "reserved_fc_transfers": "2",
                     "reserved_fc_processing": "1",
                 }
             },
             {
+                "quantity": 15,
                 "remark": {
                     "afn_fulfillable_quantity": "4",
+                    "afn_reserved_quantity": "11",
                     "reserved_fc_transfers": "5",
                     "reserved_fc_processing": "6",
                 }
@@ -648,11 +672,30 @@ class SummaryDailySalesTests(unittest.TestCase):
         rows = build_report_rows([record])
 
         self.assertEqual(rows[0]["日均销量"], 12.34)
+        self.assertEqual(rows[0]["ASIN"], "B001")
         self.assertEqual(rows[0]["FBA库存"], 5)
         self.assertEqual(rows[0]["FBA在途"], 12)
         self.assertEqual(rows[0]["FBA可售-可售"], 9)
         self.assertEqual(rows[0]["FBA可售-待调仓"], 2)
         self.assertEqual(rows[0]["FBA可售-调仓中"], 1)
+
+    def test_build_report_rows_outputs_restock_status_column(self) -> None:
+        paused_item = make_summary_item(hash_id="hash-paused", msku="MSKU-PAUSED")
+        paused_item["ext_info"]["restock_status"] = 1
+        normal_item = make_summary_item(hash_id="hash-normal", msku="MSKU-NORMAL")
+        normal_item["ext_info"]["restock_status"] = 0
+
+        paused_record = classify_record(paused_item, date(2026, 4, 7), {"1448": "店铺A"}, {"1448"})
+        normal_record = classify_record(normal_item, date(2026, 4, 7), {"1448": "店铺A"}, {"1448"})
+        assert paused_record is not None
+        assert normal_record is not None
+
+        rows = build_report_rows([paused_record, normal_record])
+
+        self.assertEqual(
+            {row["MSKU"]: row["补货状态"] for row in rows},
+            {"MSKU-NORMAL": "正常补货", "MSKU-PAUSED": "暂不补货"},
+        )
 
     def test_build_listing_contact_map_groups_contacts_by_sid_and_asin(self) -> None:
         listing_rows = [

@@ -25,6 +25,7 @@ from .report import build_main_report_path, build_store_report_path, export_scop
 from .scopes import AlertScope, resolve_scope_report_group_name, resolve_scope_sid_list
 from .store_policies import (
     resolve_main_report_user_ids,
+    resolve_notify_user_ids,
     resolve_sid_list,
     resolve_store_report_group_name,
     resolve_store_report_user_ids,
@@ -64,6 +65,14 @@ class AlertJobResult:
 
 def count_sid_asin_pairs(sid_asin_map: dict[str, set[str]]) -> int:
     return sum(len(asin_set) for asin_set in sid_asin_map.values())
+
+
+def unique_ordered_values(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        if value and value not in result:
+            result.append(value)
+    return result
 
 
 def build_summary_fetch_batches(scoped_sid_list: list[str], seller_map: dict[str, str]) -> list[tuple[list[str], int | None]]:
@@ -208,9 +217,9 @@ def upload_reports_to_dingpan(
             print(f"[dingpan] 解析 union_id={union_id}")
 
         upload_paths: list[str] = []
-        if scope in {AlertScope.ALL, AlertScope.EZARC_TEST, AlertScope.YPLUS_TEST}:
+        if scope in {AlertScope.ALL, AlertScope.EZARC, AlertScope.YPLUS, AlertScope.EZARC_TEST, AlertScope.YPLUS_TEST}:
             upload_paths.append(main_report_path)
-        if scope is AlertScope.ALL:
+        if scope in {AlertScope.ALL, AlertScope.EZARC, AlertScope.YPLUS, AlertScope.EZARC_TEST, AlertScope.YPLUS_TEST}:
             store_report_paths = build_store_report_paths(main_report_path, alerts, today)
             for store_report_path in store_report_paths.values():
                 if store_report_path not in upload_paths:
@@ -419,9 +428,10 @@ def build_dingpan_folder_route(report_file_name: str, store_name: str) -> list[s
 
 def build_store_report_paths(report_path: str, alerts: list[AlertRecord], today: date) -> dict[str, str]:
     date_dir = Path(report_path).parent
+    report_name = Path(report_path).stem.removesuffix(f"-{today.strftime('%Y%m%d')}")
     store_names = sorted({resolve_store_report_group_name(alert.seller_name) for alert in alerts})
     return {
-        store_name: str(build_store_report_path(store_name, today, str(date_dir.parent)))
+        store_name: str(build_store_report_path(store_name, today, str(date_dir.parent), report_name))
         for store_name in store_names
     }
 
@@ -438,6 +448,7 @@ def notify_store_reports(
     store_report_paths = build_store_report_paths(main_report_path, alerts, today)
     preview_url_map = preview_url_map or {}
     for store_name, store_report_path in store_report_paths.items():
+        brand_name = resolve_dingpan_brand_name(Path(main_report_path).name, store_name)
         user_ids = resolve_store_report_user_ids(store_name, fallback_user_ids)
         print(
             "[notify] 店铺分表准备发送: "
@@ -449,7 +460,7 @@ def notify_store_reports(
             user_ids,
             dry_run=dry_run,
             preview_url=preview_url_map.get(store_report_path, ""),
-            title=f"LIBRATON 库存预警 - {store_name}",
+            title=f"{brand_name} 库存预警 - {store_name}",
         )
 
 
@@ -494,7 +505,7 @@ def ensure_ezarc_test_jp_inventory_candidates(
     seller_map: dict[str, str],
     scope: AlertScope,
 ) -> dict[str, set[str]]:
-    if scope is not AlertScope.EZARC_TEST:
+    if scope not in {AlertScope.EZARC, AlertScope.EZARC_TEST}:
         return sid_asin_map
 
     result = {sid: set(asins) for sid, asins in sid_asin_map.items()}
@@ -519,7 +530,7 @@ def merge_ezarc_test_jp_alerts(
     allowed_sids: set[str],
     inventory_snapshot_map: dict[tuple[str, str], object],
 ) -> list[AlertRecord]:
-    if scope is not AlertScope.EZARC_TEST:
+    if scope not in {AlertScope.EZARC, AlertScope.EZARC_TEST}:
         return alerts
 
     jp_sellers = {"EZARC JP-JP", "CBT-F Tools-JP"}
@@ -535,6 +546,9 @@ def merge_ezarc_test_jp_alerts(
             continue
 
         suggest = item.get("suggest_info") or {}
+        ext_info = item.get("ext_info") or {}
+        restock_status_raw = ext_info.get("restock_status")
+        restock_status = None if restock_status_raw in (None, "") else safe_int(restock_status_raw)
         amazon_quantity_info = ((item.get("data") or {}).get("amazon_quantity_info") or {})
         inventory_snapshot = inventory_snapshot_map.get((sid, asin))
         if inventory_snapshot is None:
@@ -557,22 +571,23 @@ def merge_ezarc_test_jp_alerts(
                 if is_primary_msku(str(row.get("msku") or ""))
             ]
         )
-        for msku in mskus:
-            jp_bucket.setdefault(msku, []).append(
-                {
-                    "asin": asin,
-                    "sid": sid,
-                    "node_type": safe_int(basic.get("node_type")),
-                    "summary_daily_sales": round(safe_float(suggest.get("estimated_sale_avg_quantity")), 2),
-                    "fba_inventory": fba_inventory,
-                    "fba_inbound_inventory": fba_inbound_inventory,
-                    "fba_sellable_inventory": fba_sellable_inventory,
-                    "fba_transfer_reserved_inventory": fba_transfer_reserved_inventory,
-                    "fba_processing_inventory": fba_processing_inventory,
-                }
-            )
+        jp_bucket.setdefault(asin, []).append(
+            {
+                "asin": asin,
+                "sid": sid,
+                "node_type": safe_int(basic.get("node_type")),
+                "mskus": mskus,
+                "summary_daily_sales": round(safe_float(suggest.get("estimated_sale_avg_quantity")), 2),
+                "fba_inventory": fba_inventory,
+                "fba_inbound_inventory": fba_inbound_inventory,
+                "fba_sellable_inventory": fba_sellable_inventory,
+                "fba_transfer_reserved_inventory": fba_transfer_reserved_inventory,
+                "fba_processing_inventory": fba_processing_inventory,
+                "restock_status": restock_status,
+            }
+        )
 
-    for msku, items in jp_bucket.items():
+    for asin, items in jp_bucket.items():
         total_daily_sales = round(sum(item["summary_daily_sales"] for item in items), 2)
         total_fba_inventory = sum(item["fba_inventory"] for item in items)
         total_fba_inbound_inventory = sum(item["fba_inbound_inventory"] for item in items)
@@ -604,15 +619,17 @@ def merge_ezarc_test_jp_alerts(
             continue
 
         first = items[0]
+        restock_status = 1 if any(item["restock_status"] == 1 for item in items) else 0
+        merged_mskus = unique_ordered_values([msku for item in items for msku in item["mskus"]])
         merged.append(
             AlertRecord(
                 level=level,
                 reasons=reasons,
-                asin=str(first["asin"]),
+                asin=asin,
                 sid=str(first["sid"]),
                 seller_name="EZARC JP 汇总",
                 node_type=safe_int(first["node_type"]),
-                mskus=[msku],
+                mskus=merged_mskus,
                 listing_contacts="",
                 fba_plus_days=fba_plus_days,
                 fba_days=fba_days,
@@ -624,7 +641,8 @@ def merge_ezarc_test_jp_alerts(
                 summary_daily_sales=total_daily_sales,
                 out_stock_date=out_stock_date,
                 out_stock_days=out_stock_days,
-                hash_id=f"ezarc-jp-{msku}",
+                restock_status=restock_status,
+                hash_id=f"ezarc-jp-{asin}",
             )
         )
 
@@ -744,21 +762,21 @@ async def run_alert_job(
 
         print("[main] 生成 Excel 报表")
         report_started_at = time.perf_counter()
-        if scope_value is AlertScope.EZARC_TEST:
+        if scope_value in {AlertScope.EZARC, AlertScope.EZARC_TEST}:
             report_path = export_total_report(
                 export_report,
                 alerts,
                 today,
-                include_store_reports=False,
-                main_report_name="EZARC库存预警测试",
+                include_store_reports=True,
+                main_report_name="EZARC库存预警测试" if scope_value is AlertScope.EZARC_TEST else "EZARC库存预警",
             )
-        elif scope_value is AlertScope.YPLUS_TEST:
+        elif scope_value in {AlertScope.YPLUS, AlertScope.YPLUS_TEST}:
             report_path = export_total_report(
                 export_report,
                 alerts,
                 today,
-                include_store_reports=False,
-                main_report_name="YPLUS库存预警测试",
+                include_store_reports=True,
+                main_report_name="YPLUS库存预警测试" if scope_value is AlertScope.YPLUS_TEST else "YPLUS库存预警",
             )
         elif scope_value is AlertScope.ALL:
             report_path = export_total_report(export_report, alerts, today)
@@ -783,24 +801,48 @@ async def run_alert_job(
 
         if upload_only:
             print("[notify] upload-only 模式，跳过所有消息发送")
-        elif scope_value is AlertScope.EZARC_TEST:
+        elif scope_value in {AlertScope.EZARC, AlertScope.EZARC_TEST}:
             notify_report(
                 report_path,
                 notifier,
-                [],
+                resolve_delivery_user_ids(resolve_notify_user_ids(alerts, user_ids), override_user_ids),
                 dry_run=dry_run,
                 preview_url=preview_url_map.get(report_path, ""),
-                title="EZARC 库存预警测试 - 总表",
+                title="EZARC 库存预警测试 - 总表" if scope_value is AlertScope.EZARC_TEST else "EZARC 库存预警 - 总表",
             )
-        elif scope_value is AlertScope.YPLUS_TEST:
+            if override_user_ids:
+                print("[notify] 检测到 --notify-user-id override，跳过店铺分表分发，仅发送总表")
+            else:
+                notify_store_reports(
+                    report_path,
+                    alerts,
+                    today,
+                    notifier,
+                    user_ids,
+                    dry_run=dry_run,
+                    preview_url_map=preview_url_map,
+                )
+        elif scope_value in {AlertScope.YPLUS, AlertScope.YPLUS_TEST}:
             notify_report(
                 report_path,
                 notifier,
-                [],
+                resolve_delivery_user_ids(resolve_notify_user_ids(alerts, user_ids), override_user_ids),
                 dry_run=dry_run,
                 preview_url=preview_url_map.get(report_path, ""),
-                title="YPLUS 库存预警测试 - 总表",
+                title="YPLUS 库存预警测试 - 总表" if scope_value is AlertScope.YPLUS_TEST else "YPLUS 库存预警 - 总表",
             )
+            if override_user_ids:
+                print("[notify] 检测到 --notify-user-id override，跳过店铺分表分发，仅发送总表")
+            else:
+                notify_store_reports(
+                    report_path,
+                    alerts,
+                    today,
+                    notifier,
+                    user_ids,
+                    dry_run=dry_run,
+                    preview_url_map=preview_url_map,
+                )
         elif scope_value is AlertScope.ALL:
             main_report_user_ids = resolve_delivery_user_ids(
                 resolve_main_report_user_ids(user_ids),

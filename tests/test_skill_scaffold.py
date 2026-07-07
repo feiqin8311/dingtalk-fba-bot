@@ -21,9 +21,7 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertIn('  "${python_bin}" -m fba_alert.main "$@"', runner_text)
 
     def test_ops_wrapper_execs_dingtalk_bot_env_python(self) -> None:
-        ops_runner_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/scripts/run-fba-alert.sh").read_text(
-            encoding="utf-8"
-        )
+        ops_runner_text = (SKILL_ROOT / "scripts" / "run-fba-alert.sh").read_text(encoding="utf-8")
 
         self.assertIn("python_bin=", ops_runner_text)
         self.assertIn("/envs/dingtalk-bot/bin/python", ops_runner_text)
@@ -68,22 +66,18 @@ class SkillScaffoldTests(unittest.TestCase):
         self.assertIn("--scope eu", reference_text)
 
     def test_skill_documents_japan_scoped_trigger_for_ops_wrapper(self) -> None:
-        ops_skill_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/SKILL.md").read_text(encoding="utf-8")
-        ops_soul_text = Path("/home/yida/.openclaw/workspace-ops/SOUL.md").read_text(encoding="utf-8")
-        ops_reference_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/references/config.md").read_text(encoding="utf-8")
+        ops_skill_text = (SKILL_ROOT / "SKILL.md").read_text(encoding="utf-8")
+        ops_reference_text = (SKILL_ROOT / "references" / "config.md").read_text(encoding="utf-8")
 
-        self.assertIn("5. LIBRATON库存预警-日本", ops_skill_text)
-        self.assertIn("5. LIBRATON库存预警-日本", ops_soul_text)
-        self.assertIn("LIBRATON库存预警-日本", ops_reference_text)
-        self.assertIn("--scope jp", ops_skill_text)
+        self.assertIn("-日本", ops_skill_text)
+        self.assertIn("--scope us|ca|eu|jp", ops_skill_text)
         self.assertIn("--scope jp", ops_reference_text)
 
-    def test_ops_wrapper_rejects_live_send_without_notify_override(self) -> None:
-        ops_runner_text = Path("/home/yida/.openclaw/workspace-ops/skills/dingtalk-fba-alert/scripts/run-fba-alert.sh").read_text(encoding="utf-8")
+    def test_skill_runner_passes_live_send_arguments_through(self) -> None:
+        ops_runner_text = (SKILL_ROOT / "scripts" / "run-fba-alert.sh").read_text(encoding="utf-8")
 
-        self.assertIn("--notify-user-id", ops_runner_text)
-        self.assertIn("--dry-run", ops_runner_text)
-        self.assertIn("OpenClaw live send requires --notify-user-id", ops_runner_text)
+        self.assertIn('  "${python_bin}" -m fba_alert.main "$@"', ops_runner_text)
+        self.assertNotIn("OpenClaw live send requires --notify-user-id", ops_runner_text)
 
 
 if __name__ == "__main__":

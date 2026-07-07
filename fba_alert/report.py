@@ -14,6 +14,7 @@ REPORT_HEADERS = [
     "店铺",
     "等级",
     "MSKU",
+    "ASIN",
     "Listing联系人",
     "命中条数",
     "命中规则",
@@ -27,57 +28,69 @@ REPORT_HEADERS = [
     "FBA可售-可售",
     "FBA可售-待调仓",
     "FBA可售-调仓中",
+    "补货状态",
 ]
 REPORT_COLUMN_WIDTHS = {
     "A": 22,
     "B": 8,
     "C": 18,
-    "D": 18,
-    "E": 10,
-    "F": 48,
-    "G": 12,
+    "D": 14,
+    "E": 18,
+    "F": 10,
+    "G": 48,
     "H": 12,
     "I": 12,
-    "J": 14,
-    "K": 16,
+    "J": 12,
+    "K": 14,
     "L": 16,
-    "M": 18,
-    "N": 16,
-    "O": 14,
-    "P": 12,
+    "M": 16,
+    "N": 18,
+    "O": 16,
+    "P": 14,
+    "Q": 12,
+    "R": 12,
 }
+
+
+def format_restock_status(status: int | None) -> str:
+    if status == 0:
+        return "正常补货"
+    if status == 1:
+        return "暂不补货"
+    return ""
 
 
 def build_report_rows(alerts: list[AlertRecord]) -> list[dict]:
     rows: list[dict] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[str] = set()
     for item in alerts:
         reason_text = "；".join(item.reasons)
-        for msku in item.mskus:
-            key = (item.sid, item.level, msku)
-            if key in seen:
-                continue
-            seen.add(key)
-            rows.append(
-                {
-                    "店铺": item.seller_name,
-                    "等级": item.level,
-                    "MSKU": msku,
-                    "Listing联系人": item.listing_contacts,
-                    "命中条数": len(item.reasons),
-                    "命中规则": reason_text,
-                    "日均销量": item.summary_daily_sales,
-                    "FBA库存": item.fba_inventory,
-                    "可售天数(FBA)": item.fba_days,
-                    "FBA在途": item.fba_inbound_inventory,
-                    "可售天数(FBA+在途)": item.fba_plus_days,
-                    "断货时间": item.out_stock_date or "",
-                    "断货天数": item.out_stock_days,
-                    "FBA可售-可售": item.fba_sellable_inventory,
-                    "FBA可售-待调仓": item.fba_transfer_reserved_inventory,
-                    "FBA可售-调仓中": item.fba_processing_inventory,
-                }
-            )
+        msku_text = "、".join(item.mskus)
+        if item.hash_id in seen:
+            continue
+        seen.add(item.hash_id)
+        rows.append(
+            {
+                "店铺": item.seller_name,
+                "等级": item.level,
+                "MSKU": msku_text,
+                "ASIN": item.asin,
+                "Listing联系人": item.listing_contacts,
+                "命中条数": len(item.reasons),
+                "命中规则": reason_text,
+                "日均销量": item.summary_daily_sales,
+                "FBA库存": item.fba_inventory,
+                "可售天数(FBA)": item.fba_days,
+                "FBA在途": item.fba_inbound_inventory,
+                "可售天数(FBA+在途)": item.fba_plus_days,
+                "断货时间": item.out_stock_date or "",
+                "断货天数": item.out_stock_days,
+                "FBA可售-可售": item.fba_sellable_inventory,
+                "FBA可售-待调仓": item.fba_transfer_reserved_inventory,
+                "FBA可售-调仓中": item.fba_processing_inventory,
+                "补货状态": format_restock_status(item.restock_status),
+            }
+        )
     rows.sort(key=lambda row: (row["店铺"], row["等级"], row["断货天数"] if row["断货天数"] > 0 else 10**9, row["MSKU"]))
     return rows
 
@@ -96,9 +109,14 @@ def build_store_report_file_label(store_name: str) -> str:
     return store_name
 
 
-def build_store_report_path(store_name: str, today: date, output_dir: str) -> Path:
+def build_store_report_path(
+    store_name: str,
+    today: date,
+    output_dir: str,
+    report_name: str = "LIBRATON库存预警",
+) -> Path:
     file_label = build_store_report_file_label(store_name)
-    return build_date_report_dir(today, output_dir) / store_name / f"LIBRATON库存预警-{file_label}-{today.strftime('%Y%m%d')}.xlsx"
+    return build_date_report_dir(today, output_dir) / store_name / f"{report_name}-{file_label}-{today.strftime('%Y%m%d')}.xlsx"
 
 
 def group_rows_by_store(rows: list[dict]) -> dict[str, list[dict]]:
@@ -171,7 +189,7 @@ def export_alert_report(
     if include_store_reports:
         rows_by_store_report = group_rows_by_store_report(rows)
         for store_name, store_rows in rows_by_store_report.items():
-            store_file_path = build_store_report_path(store_name, today, output_dir)
+            store_file_path = build_store_report_path(store_name, today, output_dir, main_report_name)
             store_file_path.parent.mkdir(parents=True, exist_ok=True)
             write_report_workbook(store_rows, store_file_path)
 

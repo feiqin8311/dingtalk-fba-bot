@@ -98,9 +98,6 @@ def classify_record(
     data = item.get("data") or {}
     amazon_quantity_info = data.get("amazon_quantity_info") or {}
 
-    if safe_int(ext_info.get("restock_status")) == 1:
-        return None
-
     asin = (basic.get("asin") or "").strip()
     hash_id = (basic.get("hash_id") or "").strip()
     sid = str(basic.get("sid") or "").strip()
@@ -127,6 +124,8 @@ def classify_record(
     summary_fba_days = safe_int(suggest.get("available_sale_days_fba"))
     summary_out_stock_date = str(suggest.get("out_stock_date") or "").strip()
     summary_out_stock_days = calc_out_stock_days(summary_out_stock_date, today)
+    restock_status_raw = ext_info.get("restock_status")
+    restock_status = None if restock_status_raw in (None, "") else safe_int(restock_status_raw)
     fba_plus_days = summary_fba_plus_days
     fba_days = summary_fba_days
     fba_inventory = safe_int(summary_fba_inventory_raw)
@@ -214,6 +213,7 @@ def classify_record(
         summary_daily_sales=summary_daily_sales,
         out_stock_date=out_stock_date,
         out_stock_days=out_stock_days,
+        restock_status=restock_status,
         hash_id=hash_id,
     )
 
