@@ -99,7 +99,7 @@ def is_transient_connection_error_response(resp: dict) -> bool:
 def is_access_token_mismatch_response(resp: dict) -> bool:
     code = str(resp.get("code") or "").strip()
     message = str(resp.get("msg") or resp.get("message") or "").strip().lower()
-    return code == "2001005" and "access token not match" in message
+    return code in {"2001003", "2001005"} and "access token" in message
 
 
 def is_source_list_rate_limited_response(resp: dict) -> bool:

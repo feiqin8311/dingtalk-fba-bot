@@ -136,6 +136,34 @@ class LingxingClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rows, [{"basic_info": {"asin": "B001"}}])
         self.assertEqual(calls, ["old-token", "new-token"])
 
+    async def test_fetch_source_list_refreshes_token_on_expired_token(self) -> None:
+        client = LingxingClient(make_config())
+        calls: list[str] = []
+
+        async def fake_fetch_access_token() -> str:
+            return "new-token"
+
+        async def fake_request(
+            access_token: str,
+            route_name: str,
+            method: str,
+            req_params: dict | None = None,
+            req_body: dict | None = None,
+            **kwargs: object,
+        ) -> dict:
+            calls.append(access_token)
+            if len(calls) == 1:
+                return {"code": "2001003", "msg": " access token is missing or expire.", "data": None}
+            return {"code": 0, "data": {"source_list": [{"quantity": 5}]}}
+
+        client.fetch_access_token = fake_fetch_access_token  # type: ignore[method-assign]
+        client.request = fake_request  # type: ignore[method-assign]
+
+        rows = await client.fetch_source_list("old-token", "1448", "B001", "2")
+
+        self.assertEqual(rows, [{"quantity": 5}])
+        self.assertEqual(calls, ["old-token", "new-token"])
+
     async def test_fetch_summary_items_can_override_data_type(self) -> None:
         client = LingxingClient(make_config())
         request_bodies: list[dict] = []
