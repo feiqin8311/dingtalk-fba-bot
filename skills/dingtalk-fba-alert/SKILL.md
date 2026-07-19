@@ -1,6 +1,6 @@
 ---
 name: dingtalk-fba-alert
-description: Use when the user wants an AI to trigger the DingTalk FBA inventory alert workflow in this repository from a natural-language command, including dry-run checks and one-shot live sends for the main Libraton inventory alert.
+description: Run this repository's DingTalk FBA inventory alert workflow for Libraton, EZARC, or YPLUS. Use for dry runs, one-shot live sends, explicit alert scopes, upload-only runs, and the fixed Libraton/EZARC/YPLUS natural-language triggers.
 ---
 
 # Dingtalk FBA Alert
@@ -12,18 +12,6 @@ Any AI that installs this skill should treat the repository itself as the execut
 - the project generates reports and sends DingTalk files through its own built-in delivery flow when live mode is used
 
 For conversational AI usage, prefer run once / one-shot execution. Do not start scheduler mode unless the user explicitly asks to manage long-running scheduling.
-
-## Use This Skill For
-
-- triggering the inventory alert workflow from a natural-language command
-- generating the Excel warning report with `--dry-run`
-- performing a one-shot live send through the project's own DingTalk logic
-- operating the repo from a local checkout
-
-## Do Not Use This Skill For
-
-- unrelated DingTalk bot development
-- changing the alert rules or Python implementation unless the user explicitly asks to modify this project
 
 ## Required Checks
 
@@ -54,18 +42,20 @@ bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh
 This project already knows how to generate the report and send the correct files to the configured recipients.
 When the trigger comes from a chat surface that provides the current asker's DingTalk `sender_id`, append `--notify-user-id <sender_id>` so the files are sent only to that asker instead of the repository defaults.
 
-## Supported Trigger Phrase
+## Natural-Language Triggers
 
-Use this fixed mapping for the natural-language trigger:
+Use these fixed mappings for natural-language triggers:
 
 - `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all --notify-user-id <sender_id>`
-
-The ops wrapper may also expose explicit scoped commands such as `LIBRATON库存预警-美国` / `-加拿大` / `-欧洲` / `-日本`, which should map to `--scope us|ca|eu|jp` respectively.
+- `EZARC库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope ezarc --notify-user-id <sender_id>`
+- `YPLUS库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope yplus --notify-user-id <sender_id>`
+- `EZARC库存预警测试` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope ezarc-test --notify-user-id <sender_id>`
+- `YPLUS库存预警测试` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope yplus-test --notify-user-id <sender_id>`
 
 If the user explicitly asks to test only, prepend `--dry-run` to the mapped command.
 If the current chat context does not expose a trustworthy `sender_id`, omit `--notify-user-id` and fall back to the repository defaults.
 
-Do not invent extra aliases or fuzzy matches. If the user asks for country-specific Libraton alerts, tell them this skill no longer exposes country trigger phrases and that scoped runs must be invoked explicitly by command.
+Do not invent aliases. For all other scoped runs, require an explicit `--scope` command; see `references/config.md` for the supported values.
 
 ## Delivery Rule
 
@@ -74,6 +64,14 @@ Run the repository command that performs the built-in DingTalk delivery flow.
 Do not rewrite that trigger into a dry-run summary-only path.
 After the live run, the AI may report success or failure in chat, but the project remains responsible for the actual DingTalk file delivery.
 When `--notify-user-id <sender_id>` is present, the repository will override its default recipient list and send only to that current asker.
+
+## Scope And Upload Behavior
+
+- `all` creates the Libraton main report and matching store reports.
+- `us`, `ca`, `jp`, and `eu` create only their Libraton scoped report.
+- `ezarc` and `yplus` create a brand main report and matching store reports; `ezarc-test` and `yplus-test` do the same with test-labelled reports.
+- `--upload-only` uploads reports to DingPan but sends no DingTalk messages. Use it without `--dry-run`.
+- With `--notify-user-id`, main-report scopes send only the main report and skip store-report delivery.
 
 ## Failure Handling
 
