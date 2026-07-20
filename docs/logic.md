@@ -452,7 +452,7 @@ YPLUS 当前没有按 ASIN 汇总的特殊逻辑；按接口返回记录进入�
 
 ### 钉盘上传
 
-非 dry-run、存在 notifier 且 `DINGTALK_DINGPAN_ENABLED=true` 时上传钉盘。
+非 dry-run、存在 notifier 且 `DINGTALK_DINGPAN_ENABLED=true` 时先上传钉盘；只有成功取得文件预览链接的报表才会发送该链接。钉盘关闭、上传失败或未取得文件 ID 时不发送消息，不再发送本地附件。
 
 品牌根目录：
 
@@ -481,15 +481,14 @@ YPLUS 当前没有按 ASIN 汇总的特殊逻辑；按接口返回记录进入�
 
 总表收件人：
 
-- `scope=ezarc/ezarc-test`：从本次预警涉及店铺的 `notify_user_ids` 去重汇总；如果全为空，才用 `.env` 的 `DINGTALK_USER_IDS` 兜底。
-- `scope=yplus/yplus-test`：从本次预警涉及店铺的 `notify_user_ids` 去重汇总；如果全为空，才用 `.env` 的 `DINGTALK_USER_IDS` 兜底。
-- `scope=all`：固定发给 `MAIN_REPORT_USER_IDS`，当前是 `16063564311489688`、`17331048354297047`。
-- `scope=us/ca/jp/eu`：按对应店铺/分组的 `notify_user_ids`，没有则用 `.env` 的 `DINGTALK_USER_IDS` 兜底。
+- `scope=all`：固定发给 `16063564311489688`、柯鹏翔 `17331048354297047`。
+- `scope=ezarc/ezarc-test/yplus/yplus-test`：总表只发给柯鹏翔 `17331048354297047`。
+- `scope=us/ca/jp/eu`：只发给对应店铺/分组的 `notify_user_ids`；未配置收件人则不发送。
 
 店铺分表收件人：
 
 - 优先使用该店铺或分组在 `STORE_POLICIES` 里的 `notify_user_ids`。
-- 如果该店铺或分组没有专属收件人，才用 `.env` 的 `DINGTALK_USER_IDS` 兜底。
+- 未配置专属收件人则不发送。
 - 当前本地 `.env` 兜底只有 `17331048354297047`。
 
 ### 当前店铺收件人
@@ -506,8 +505,8 @@ YPLUS 当前没有按 ASIN 汇总的特殊逻辑；按接口返回记录进入�
 | YPLUS 美国 | `YPLUS-US-US`、`TrailFun-US` | 彭锦 `17441633442965653` |
 | YPLUS 加拿大 | `YPLUS-US-CA` | 葛佳伶 `395439341733212350` |
 | YPLUS 日本 | `YPLUS-JP-JP` | 葛佳伶 `395439341733212350` |
-| Libraton 总表 | `scope=all` 总表 | `16063564311489688`、`17331048354297047` |
-| 兜底 | 无专属收件人时 | `17331048354297047` |
+| Libraton 总表 | `scope=all` 总表 | `16063564311489688`、柯鹏翔 `17331048354297047` |
+| EZARC/YPLUS 总表 | `scope=ezarc/yplus` 总表 | 柯鹏翔 `17331048354297047` |
 
 ## 排查速查
 

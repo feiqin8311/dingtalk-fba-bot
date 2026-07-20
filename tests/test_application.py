@@ -11,6 +11,7 @@ from fba_alert.application import (
     build_dingpan_folder_route,
     count_sid_asin_pairs,
     ensure_dingpan_folder_route,
+    notify_report,
     notify_store_reports,
     resolve_dingpan_route_parent_id,
     run_alert_job,
@@ -89,15 +90,10 @@ class FakeLingxingClient:
 
 class FakeNotifier:
     def __init__(self) -> None:
-        self.sent: list[tuple[str, str]] = []
         self.texts: list[tuple[str, str]] = []
 
     def get_access_token(self) -> str:
         return "token"
-
-    def send_user_file(self, user_id: str, report_path: str) -> dict:
-        self.sent.append((user_id, report_path))
-        return {"ok": True, "user_id": user_id}
 
     def send_user_text(self, user_id: str, text: str) -> dict:
         self.texts.append((user_id, text))
@@ -465,13 +461,19 @@ class ApplicationTests(unittest.TestCase):
                     main_report,
                     [alert],
                     date(2026, 4, 21),
-                    notifier,
-                    fallback_user_ids=["fallback-user"],
-                    dry_run=False,
+                notifier,
+                dry_run=False,
                     preview_url_map={store_report: "https://example.invalid/preview"},
                 )
 
                 self.assertIn(f"【{title}】", notifier.texts[0][1])
+
+    def test_notify_report_skips_without_dingpan_preview_url(self) -> None:
+        notifier = FakeNotifier()
+
+        notify_report("reports/report.xlsx", notifier, ["user-1"], dry_run=False)
+
+        self.assertEqual(notifier.texts, [])
 
     def test_count_sid_asin_pairs_sums_unique_pairs(self) -> None:
         self.assertEqual(count_sid_asin_pairs({"1448": {"A1", "A2"}, "1444": {"B1"}}), 3)
@@ -626,15 +628,7 @@ class ApplicationTests(unittest.TestCase):
         self.assertEqual(result.fetched_count, 1)
         self.assertEqual(result.alert_count, 1)
         self.assertEqual(result.sid_distribution, {"1448": 1})
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("16063564311489688", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("17331048354297047", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("u1", "reports/2026-04-07/店铺A/LIBRATON库存预警-店铺A-20260407.xlsx"),
-                ("u2", "reports/2026-04-07/店铺A/LIBRATON库存预警-店铺A-20260407.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
         self.assertEqual(exported[0][1], date(2026, 4, 7))
         self.assertEqual(exported[0][0][0].listing_contacts, "张三")
 
@@ -673,14 +667,7 @@ class ApplicationTests(unittest.TestCase):
         )
 
         self.assertEqual(result.alert_count, 1)
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("16063564311489688", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("17331048354297047", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("01364646263121664148", "reports/2026-04-07/Libraton NA-CA/LIBRATON库存预警-NA-CA-20260407.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_sends_store_report_to_fallback_recipients(self) -> None:
         item = make_summary_item()
@@ -703,15 +690,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("16063564311489688", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("17331048354297047", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("fallback-1", "reports/2026-04-07/店铺A/LIBRATON库存预警-店铺A-20260407.xlsx"),
-                ("fallback-2", "reports/2026-04-07/店铺A/LIBRATON库存预警-店铺A-20260407.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_sends_combined_eu_store_report(self) -> None:
         uk_item = make_summary_item(
@@ -747,16 +726,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("16063564311489688", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("17331048354297047", "reports/2026-04-07/LIBRATON库存预警-20260407.xlsx"),
-                ("17496925056054051", "reports/2026-04-07/Libraton EU/LIBRATON库存预警-EU-20260407.xlsx"),
-                ("17621342403159969", "reports/2026-04-07/Libraton EU/LIBRATON库存预警-EU-20260407.xlsx"),
-                ("17490880140202841", "reports/2026-04-07/Libraton EU/LIBRATON库存预警-EU-20260407.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_fetches_summary_with_resolved_sid_list(self) -> None:
         item = make_summary_item(
@@ -996,23 +966,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("290435484624363486", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("01076420214327759759", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("454365106138190421", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("17427794048531392", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("17750084401515036", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("17403614178121993", "reports/2026-04-21/EZARC库存预警测试-20260421.xlsx"),
-                ("290435484624363486", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-                ("01076420214327759759", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-                ("454365106138190421", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-                ("17427794048531392", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-                ("17750084401515036", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-                ("17403614178121993", "reports/2026-04-21/EZARC NA-US/EZARC库存预警测试-EZARC NA-US-20260421.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_with_yplus_test_scope_sends_to_store_policy_users(self) -> None:
         item = make_summary_item(
@@ -1044,13 +998,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("17441633442965653", "reports/2026-04-21/YPLUS库存预警测试-20260421.xlsx"),
-                ("17441633442965653", "reports/2026-04-21/YPLUS-US-US/YPLUS库存预警测试-YPLUS-US-US-20260421.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_with_formal_brand_scopes_uses_formal_report_names(self) -> None:
         ezarc_item = make_summary_item(
@@ -1141,13 +1089,7 @@ class ApplicationTests(unittest.TestCase):
         )
 
         self.assertEqual(result.report_path, "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx")
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("17489140420206931", "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx"),
-                ("17490879808802516", "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_with_notify_override_sends_only_to_override_user(self) -> None:
         item = make_summary_item(
@@ -1181,12 +1123,7 @@ class ApplicationTests(unittest.TestCase):
         )
 
         self.assertEqual(result.report_path, "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx")
-        self.assertEqual(
-            notifier.sent,
-            [
-                ("asker-user", "reports/2026-04-21/Libraton NA-US/LIBRATON库存预警-NA-US-20260421.xlsx"),
-            ],
-        )
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_with_upload_only_skips_all_notifications(self) -> None:
         item = make_summary_item()
@@ -1210,7 +1147,7 @@ class ApplicationTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(notifier.sent, [])
+        self.assertEqual(notifier.texts, [])
 
     def test_run_alert_job_with_ezarc_test_merges_jp_rows_by_asin(self) -> None:
         ezarc_item = make_summary_item(

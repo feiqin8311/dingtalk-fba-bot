@@ -62,24 +62,29 @@ async def run_once(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_scheduled_alerts(args: argparse.Namespace) -> None:
+    for scope in ("all", "ezarc", "yplus"):
+        await run_once(argparse.Namespace(**{**vars(args), "scope": scope}))
+
+
 async def scheduler_main(args: argparse.Namespace) -> int:
     print(f"[scheduler] 加载 env 文件: {args.env_file}")
     config = load_runtime_config(args.env_file, args.dry_run)
     timezone = ZoneInfo(config.timezone)
     scheduler = AsyncIOScheduler(timezone=timezone)
     scheduler.add_job(
-        partial(run_once, args),
+        partial(run_scheduled_alerts, args),
         trigger="cron",
         day_of_week="mon",
         hour=9,
         minute=0,
-        id="weekly_libraton_stock_alert",
+        id="weekly_stock_alerts",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
     )
     scheduler.start()
-    print(f"[scheduler] 已启动，每周一 09:00 执行，时区={config.timezone}")
+    print(f"[scheduler] 已启动，每周一 09:00 依次执行 Libraton/EZARC/YPLUS，时区={config.timezone}")
     await asyncio.Event().wait()
     return 0
 

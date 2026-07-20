@@ -7,9 +7,10 @@ from unittest.mock import patch
 
 
 class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
-    async def test_scheduler_runs_every_monday_at_0900(self) -> None:
+    async def test_scheduler_runs_all_brands_in_order_every_monday(self) -> None:
         args = argparse.Namespace(env_file=".env", dry_run=False, today="", schedule=True, scope="all")
-        captured: dict[str, object] = {}
+        captured: list[tuple[object, dict[str, object]]] = []
+        scopes: list[str] = []
 
         for module_name in [
             "fba_alert.application",
@@ -41,29 +42,38 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
 
         class FakeScheduler:
             def add_job(self, func, **kwargs) -> None:
-                captured["func"] = func
-                captured["kwargs"] = kwargs
+                captured.append((func, kwargs))
 
             def start(self) -> None:
-                captured["started"] = True
+                return None
 
         class FakeEvent:
             async def wait(self) -> None:
                 return None
 
+        async def fake_run_once(scoped_args: argparse.Namespace) -> int:
+            scopes.append(scoped_args.scope)
+            return 0
+
         fake_config = types.SimpleNamespace(timezone="Asia/Shanghai")
 
         with patch.object(main_module, "load_runtime_config", return_value=fake_config), patch.object(
             main_module, "AsyncIOScheduler", return_value=FakeScheduler()
-        ), patch.object(main_module.asyncio, "Event", return_value=FakeEvent()):
+        ), patch.object(main_module.asyncio, "Event", return_value=FakeEvent()), patch.object(
+            main_module, "run_once", new=fake_run_once
+        ):
             result = await main_module.scheduler_main(args)
+            await captured[0][0]()
 
         self.assertEqual(result, 0)
-        self.assertTrue(captured["started"])
-        self.assertEqual(captured["kwargs"]["trigger"], "cron")
-        self.assertEqual(captured["kwargs"]["day_of_week"], "mon")
-        self.assertEqual(captured["kwargs"]["hour"], 9)
-        self.assertEqual(captured["kwargs"]["minute"], 0)
+        self.assertEqual(scopes, ["all", "ezarc", "yplus"])
+        self.assertEqual(len(captured), 1)
+        _, kwargs = captured[0]
+        self.assertEqual(kwargs["trigger"], "cron")
+        self.assertEqual(kwargs["day_of_week"], "mon")
+        self.assertEqual(kwargs["hour"], 9)
+        self.assertEqual(kwargs["minute"], 0)
+        self.assertEqual(kwargs["id"], "weekly_stock_alerts")
 
 
 class ParseArgsTests(unittest.TestCase):

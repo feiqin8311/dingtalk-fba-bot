@@ -24,8 +24,8 @@ from .models import AlertRecord
 from .report import build_main_report_path, build_store_report_path, export_scoped_alert_report
 from .scopes import AlertScope, resolve_scope_report_group_name, resolve_scope_sid_list
 from .store_policies import (
+    BRAND_MAIN_REPORT_USER_IDS,
     resolve_main_report_user_ids,
-    resolve_notify_user_ids,
     resolve_sid_list,
     resolve_store_report_group_name,
     resolve_store_report_user_ids,
@@ -180,17 +180,14 @@ def notify_report(
     if notifier is None:
         raise RuntimeError("非 dry-run 模式必须提供 notifier。")
 
-    if preview_url:
-        text = f"【{title}】\n请查看HTML诊断报告：{preview_url}"
-        for user_id in user_ids:
-            print(f"[notify] 发送钉盘链接: user_id={user_id} url={preview_url}")
-            result = notifier.send_user_text(user_id, text)
-            print(f"[send] user_id={user_id} result={json.dumps(result, ensure_ascii=False)}")
+    if not preview_url:
+        print(f"[notify] 钉盘上传未成功，跳过发送: {report_path}")
         return
 
+    text = f"【{title}】\n请查看钉盘报告：{preview_url}"
     for user_id in user_ids:
-        print(f"[notify] 发送钉钉文件: user_id={user_id}")
-        result = notifier.send_user_file(user_id, report_path)
+        print(f"[notify] 发送钉盘链接: user_id={user_id} url={preview_url}")
+        result = notifier.send_user_text(user_id, text)
         print(f"[send] user_id={user_id} result={json.dumps(result, ensure_ascii=False)}")
 
 
@@ -204,7 +201,7 @@ def upload_reports_to_dingpan(
 ) -> dict[str, str]:
     """在钉盘建当天日期子文件夹，上传主表和各店铺分表。
 
-    返回 {report_path: preview_url}。失败时返回空 dict 并打印错误，不阻塞消息发送。
+    返回 {report_path: preview_url}。上传失败的文件没有链接，因此不会发送消息。
     """
     if not dingtalk_config.dingpan_enabled:
         return {}
@@ -291,7 +288,7 @@ def upload_reports_to_dingpan(
             print(f"[dingpan] 预览链接: {file_path.name} -> {preview_url_map[path_str]}")
         return preview_url_map
     except Exception as exc:
-        print(f"[dingpan] 上传失败，回退为附件直发: {exc!r}")
+        print(f"[dingpan] 上传失败，跳过消息发送: {exc!r}")
         return {}
 
 
@@ -441,7 +438,6 @@ def notify_store_reports(
     alerts: list[AlertRecord],
     today: date,
     notifier: Optional[object],
-    fallback_user_ids: list[str],
     dry_run: bool,
     preview_url_map: Optional[dict[str, str]] = None,
 ) -> None:
@@ -449,7 +445,7 @@ def notify_store_reports(
     preview_url_map = preview_url_map or {}
     for store_name, store_report_path in store_report_paths.items():
         brand_name = resolve_dingpan_brand_name(Path(main_report_path).name, store_name)
-        user_ids = resolve_store_report_user_ids(store_name, fallback_user_ids)
+        user_ids = resolve_store_report_user_ids(store_name)
         print(
             "[notify] 店铺分表准备发送: "
             f"store={store_name} user_count={len(user_ids)} path={store_report_path}"
@@ -805,7 +801,10 @@ async def run_alert_job(
             notify_report(
                 report_path,
                 notifier,
-                resolve_delivery_user_ids(resolve_notify_user_ids(alerts, user_ids), override_user_ids),
+                resolve_delivery_user_ids(
+                    BRAND_MAIN_REPORT_USER_IDS,
+                    override_user_ids,
+                ),
                 dry_run=dry_run,
                 preview_url=preview_url_map.get(report_path, ""),
                 title="EZARC 库存预警测试 - 总表" if scope_value is AlertScope.EZARC_TEST else "EZARC 库存预警 - 总表",
@@ -818,7 +817,6 @@ async def run_alert_job(
                     alerts,
                     today,
                     notifier,
-                    user_ids,
                     dry_run=dry_run,
                     preview_url_map=preview_url_map,
                 )
@@ -826,7 +824,10 @@ async def run_alert_job(
             notify_report(
                 report_path,
                 notifier,
-                resolve_delivery_user_ids(resolve_notify_user_ids(alerts, user_ids), override_user_ids),
+                resolve_delivery_user_ids(
+                    BRAND_MAIN_REPORT_USER_IDS,
+                    override_user_ids,
+                ),
                 dry_run=dry_run,
                 preview_url=preview_url_map.get(report_path, ""),
                 title="YPLUS 库存预警测试 - 总表" if scope_value is AlertScope.YPLUS_TEST else "YPLUS 库存预警 - 总表",
@@ -839,7 +840,6 @@ async def run_alert_job(
                     alerts,
                     today,
                     notifier,
-                    user_ids,
                     dry_run=dry_run,
                     preview_url_map=preview_url_map,
                 )
@@ -864,14 +864,13 @@ async def run_alert_job(
                     alerts,
                     today,
                     notifier,
-                    user_ids,
                     dry_run=dry_run,
                     preview_url_map=preview_url_map,
                 )
         else:
             report_group_name = resolve_scope_report_group_name(scope_value)
             scoped_user_ids = resolve_delivery_user_ids(
-                resolve_store_report_user_ids(report_group_name, user_ids),
+                resolve_store_report_user_ids(report_group_name),
                 override_user_ids,
             )
             notify_report(

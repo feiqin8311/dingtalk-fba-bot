@@ -4,8 +4,9 @@ import unittest
 from fba_alert.models import AlertRecord
 from fba_alert.store_policies import (
     DEFAULT_STORE_POLICY,
+    BRAND_MAIN_REPORT_USER_IDS,
     get_store_policy,
-    resolve_notify_user_ids,
+    resolve_main_report_user_ids,
     resolve_sid_list,
 )
 
@@ -155,64 +156,11 @@ class StorePolicyTests(unittest.TestCase):
 
         self.assertEqual(sid_list, ["1448", "1443", "1444", "1457"])
 
-    def test_resolve_notify_user_ids_uses_store_specific_recipients(self) -> None:
-        alerts = [
-            AlertRecord(
-                level="A",
-                reasons=["rule"],
-                asin="B1443",
-                sid="1443",
-                seller_name="Libraton NA-US",
-                node_type=1,
-                mskus=["MSKU-1443"],
-                listing_contacts="",
-                fba_plus_days=0,
-                fba_days=10,
-                fba_inventory=1,
-                fba_inbound_inventory=0,
-                fba_sellable_inventory=1,
-                fba_transfer_reserved_inventory=0,
-                fba_processing_inventory=0,
-                summary_daily_sales=1.0,
-                out_stock_date=str(date(2026, 4, 20)),
-                out_stock_days=13,
-                restock_status=0,
-                hash_id="hash-1443",
-            ),
-            AlertRecord(
-                level="A",
-                reasons=["rule"],
-                asin="B1457",
-                sid="1457",
-                seller_name="Libraton JP-JP",
-                node_type=1,
-                mskus=["MSKU-1457"],
-                listing_contacts="",
-                fba_plus_days=0,
-                fba_days=10,
-                fba_inventory=1,
-                fba_inbound_inventory=0,
-                fba_sellable_inventory=1,
-                fba_transfer_reserved_inventory=0,
-                fba_processing_inventory=0,
-                summary_daily_sales=1.0,
-                out_stock_date=str(date(2026, 4, 20)),
-                out_stock_days=13,
-                restock_status=0,
-                hash_id="hash-1457",
-            ),
-        ]
+    def test_resolve_main_report_user_ids_includes_ke_pengxiang(self) -> None:
+        self.assertIn("17331048354297047", resolve_main_report_user_ids(["fallback-user"]))
 
-        user_ids = resolve_notify_user_ids(alerts, ["fallback-user"])
-
-        self.assertEqual(
-            user_ids,
-            [
-                "17489140420206931",
-                "17490879808802516",
-                "250755202726645853",
-            ],
-        )
+    def test_brand_main_reports_only_send_to_ke_pengxiang(self) -> None:
+        self.assertEqual(BRAND_MAIN_REPORT_USER_IDS, ["17331048354297047"])
 
 
 if __name__ == "__main__":

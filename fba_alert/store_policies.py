@@ -30,6 +30,7 @@ DEFAULT_STORE_POLICY = StorePolicy(
     auto_include_sid=False,
 )
 MAIN_REPORT_USER_IDS = ["16063564311489688", "17331048354297047"]
+BRAND_MAIN_REPORT_USER_IDS = ["17331048354297047"]
 EZARC_EU_USER_IDS = [
     "17506435638027211",
     "17585057805545058",
@@ -527,16 +528,6 @@ def resolve_sid_list(sid_list: list[str], seller_map: dict[str, str]) -> list[st
     return unique_keep_order(resolved)
 
 
-def resolve_notify_user_ids(alerts: list[AlertRecord], fallback_user_ids: list[str]) -> list[str]:
-    resolved: list[str] = []
-    for alert in alerts:
-        resolved.extend(get_store_policy(alert.seller_name).notify_user_ids)
-    user_ids = unique_keep_order(resolved)
-    if user_ids:
-        return user_ids
-    return fallback_user_ids
-
-
 def resolve_main_report_user_ids(fallback_user_ids: list[str]) -> list[str]:
     _ = fallback_user_ids
     return MAIN_REPORT_USER_IDS
@@ -547,8 +538,5 @@ def resolve_store_report_group_name(seller_name: str) -> str:
     return policy.report_group_name or seller_name.strip()
 
 
-def resolve_store_report_user_ids(seller_name: str, fallback_user_ids: list[str]) -> list[str]:
-    user_ids = unique_keep_order(get_store_policy(seller_name).notify_user_ids)
-    if user_ids:
-        return user_ids
-    return fallback_user_ids
+def resolve_store_report_user_ids(seller_name: str) -> list[str]:
+    return unique_keep_order(get_store_policy(seller_name).notify_user_ids)
