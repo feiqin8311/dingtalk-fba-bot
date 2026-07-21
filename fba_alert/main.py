@@ -3,11 +3,14 @@
 
 import argparse
 import asyncio
+import os
 from functools import partial
 
+from aiohttp import web
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from zoneinfo import ZoneInfo
 
+from .api_server import create_app
 from .application import run_alert_job
 from .dingtalk import DingTalkNotifier
 from .lingxing import LingxingClient
@@ -21,7 +24,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-file", default=".env", help="env 文件路径，默认 .env")
     parser.add_argument("--dry-run", action="store_true", help="只打印结果，不发送钉钉")
     parser.add_argument("--today", default="", help="手动指定今天日期，格式 YYYY-MM-DD")
-    parser.add_argument("--schedule", action="store_true", help="常驻运行，每周一 09:00 自动执行")
+    parser.add_argument(
+        "--schedule",
+        action="store_true",
+        help="常驻运行：每周一 09:00 自动执行，并在同一进程监听 HTTP API",
+    )
+    parser.add_argument(
+        "--no-api",
+        action="store_true",
+        help="与 --schedule 合用时不启 HTTP API（默认 schedule 会启）",
+    )
+    parser.add_argument(
+        "--api-host",
+        default=os.getenv("FBA_ALERT_API_HOST", "0.0.0.0"),
+        help="HTTP API bind host（默认 FBA_ALERT_API_HOST 或 0.0.0.0）",
+    )
+    parser.add_argument(
+        "--api-port",
+        type=int,
+        default=int(os.getenv("FBA_ALERT_API_PORT", "8090")),
+        help="HTTP API port（默认 FBA_ALERT_API_PORT 或 8090）",
+    )
     parser.add_argument(
         "--scope",
         default="all",
@@ -67,6 +90,20 @@ async def run_scheduled_alerts(args: argparse.Namespace) -> None:
         await run_once(argparse.Namespace(**{**vars(args), "scope": scope}))
 
 
+async def start_http_api(env_file: str, host: str, port: int) -> web.AppRunner:
+    """Start aiohttp API in the current event loop (same process as scheduler)."""
+    token = os.getenv("FBA_ALERT_API_TOKEN", "").strip()
+    if not token:
+        print("[api] WARNING: FBA_ALERT_API_TOKEN is empty; authenticated routes will 503")
+    app = create_app(env_file=env_file, api_token=token)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host=host, port=port)
+    await site.start()
+    print(f"[api] listening on {host}:{port} (same process as scheduler)")
+    return runner
+
+
 async def scheduler_main(args: argparse.Namespace) -> int:
     print(f"[scheduler] 加载 env 文件: {args.env_file}")
     config = load_runtime_config(args.env_file, args.dry_run)
@@ -85,7 +122,18 @@ async def scheduler_main(args: argparse.Namespace) -> int:
     )
     scheduler.start()
     print(f"[scheduler] 已启动，每周一 09:00 依次执行 Libraton/EZARC/YPLUS，时区={config.timezone}")
-    await asyncio.Event().wait()
+
+    api_runner: web.AppRunner | None = None
+    if not args.no_api:
+        api_runner = await start_http_api(args.env_file, args.api_host, args.api_port)
+    else:
+        print("[api] disabled via --no-api")
+
+    try:
+        await asyncio.Event().wait()
+    finally:
+        if api_runner is not None:
+            await api_runner.cleanup()
     return 0
 
 

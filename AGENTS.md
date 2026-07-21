@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Python DingTalk FBA alert service. Core source code lives in `fba_alert/`: `main.py` is the CLI entrypoint, `application.py` coordinates the workflow, `lingxing.py` calls Lingxing APIs, `alerts.py` classifies alert records, `report.py` writes Excel files, and `dingtalk.py` / `dingpan.py` handle delivery. Tests live in `tests/`. Operational wrappers and agent-facing commands live under `skills/dingtalk-fba-alert/`. Runtime output is written to `reports/YYYY-MM-DD/`.
+This repository is a Python DingTalk FBA alert service. Core source code lives in `fba_alert/`: `main.py` is the CLI entrypoint, `application.py` coordinates the workflow, `lingxing.py` calls Lingxing APIs, `alerts.py` classifies alert records, `report.py` writes Excel files, and `dingtalk.py` / `dingpan.py` handle delivery. Tests live in `tests/`. Agent-facing notes live under `skills/dingtalk-fba-alert/SKILL.md` (HTTP API preferred; no shell wrappers). Runtime output is written to `reports/YYYY-MM-DD/`.
 
 ## Build, Test, and Development Commands
 
@@ -24,11 +24,12 @@ Run a real send only when intended:
 python -m fba_alert.main --scope all
 ```
 
-Start the Docker scheduler:
+Start the Docker service (weekly cron + HTTP API on the same process):
 
 ```bash
 docker compose up -d --build
 docker logs -f dingtalk-fba-bot
+# YidaLab: FBA_ALERT_API_URL=http://host:8090 FBA_ALERT_API_TOKEN=...
 ```
 
 Run tests with:

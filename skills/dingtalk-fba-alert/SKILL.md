@@ -1,87 +1,58 @@
 ---
 name: dingtalk-fba-alert
-description: Run this repository's DingTalk FBA inventory alert workflow for Libraton, EZARC, or YPLUS. Use for dry runs, one-shot live sends, explicit alert scopes, upload-only runs, and the fixed Libraton/EZARC/YPLUS natural-language triggers.
+description: Company FBA inventory alert via this repo's HTTP API (or CLI). Fixed phrases LIBRATON/EZARC/YPLUS 库存预警; personal notify by userId. YidaLab uses HTTP mode=self — not shell scripts.
 ---
 
 # Dingtalk FBA Alert
 
-This skill wraps the existing `dingtalk-fba-bot` project instead of reimplementing its business logic.
-Any AI that installs this skill should treat the repository itself as the execution engine:
-- the AI recognizes the user's trigger phrase
-- the AI runs the project command that matches the request
-- the project generates reports and sends DingTalk files through its own built-in delivery flow when live mode is used
+Business logic lives in this repository (`fba_alert/`). Agents should **not** reimplement it.
 
-For conversational AI usage, prefer run once / one-shot execution. Do not start scheduler mode unless the user explicitly asks to manage long-running scheduling.
+## Preferred path (YidaLab)
 
-## Required Checks
-
-Before running anything, confirm these files exist in the workspace root:
-
-- `.env` or another env file path provided by the user
-- `requirements.txt`
-- `fba_alert/main.py`
-
-If `.env` is missing, stop and tell the user what is missing.
-
-## Default Execution Path
-
-Choose the path based on user intent:
+YidaLab calls the **HTTP API** on the same process as the weekly scheduler:
 
 ```bash
-bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --dry-run
+python -m fba_alert.main --schedule   # cron + :8090 API
 ```
 
-Use `--dry-run` when the user asks to test, verify, inspect output, or avoid DingTalk sends.
+```http
+POST /v1/alerts/run
+Authorization: Bearer <FBA_ALERT_API_TOKEN>
+{ "scope": "all", "mode": "self", "notify_user_ids": ["<dingtalk-user-id>"] }
+```
 
-For a real trigger request such as `LIBRATON库存预警`, use the live path:
+- `mode=self` + `notify_user_ids`: only that person (YidaLab injects sender / channel Owner).
+- Do **not** shell into this repo or use deleted `scripts/` wrappers from agents.
+- See repository README «HTTP API».
+
+## Fixed trigger phrases
+
+| Phrase | scope |
+| ------ | ----- |
+| `LIBRATON库存预警` | `all` (Libraton full) |
+| `EZARC库存预警` | `ezarc` |
+| `YPLUS库存预警` | `yplus` |
+
+No site menu. Optional dry-run: `mode=dry_run` or CLI `--dry-run`.
+
+## Local CLI (ops / debug only)
 
 ```bash
-bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh
+python -m fba_alert.main --dry-run --scope all
+python -m fba_alert.main --scope ezarc --notify-user-id <userId>
+python -m fba_alert.main --scope yplus --upload-only
 ```
 
-This project already knows how to generate the report and send the correct files to the configured recipients.
-When the trigger comes from a chat surface that provides the current asker's DingTalk `sender_id`, append `--notify-user-id <sender_id>` so the files are sent only to that asker instead of the repository defaults.
+Requires `.env` at repo root (`LINGXING_*`, `DINGTALK_*`, and for API `FBA_ALERT_API_TOKEN`).
 
-## Natural-Language Triggers
+## Scope notes
 
-Use these fixed mappings for natural-language triggers:
+- `all`: Libraton main + store reports (with override user, main only to that user).
+- `us` / `ca` / `jp` / `eu`: Libraton region only.
+- `ezarc` / `yplus` (+ `-test`): brand main + stores (same override rule).
 
-- `LIBRATON库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope all --notify-user-id <sender_id>`
-- `EZARC库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope ezarc --notify-user-id <sender_id>`
-- `YPLUS库存预警` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope yplus --notify-user-id <sender_id>`
-- `EZARC库存预警测试` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope ezarc-test --notify-user-id <sender_id>`
-- `YPLUS库存预警测试` -> `bash skills/dingtalk-fba-alert/scripts/run-fba-alert.sh --scope yplus-test --notify-user-id <sender_id>`
+## Failure handling
 
-If the user explicitly asks to test only, prepend `--dry-run` to the mapped command.
-If the current chat context does not expose a trustworthy `sender_id`, omit `--notify-user-id` and fall back to the repository defaults.
-
-Do not invent aliases. For all other scoped runs, require an explicit `--scope` command; see `references/config.md` for the supported values.
-
-## Delivery Rule
-
-For the fixed natural-language trigger `LIBRATON库存预警`, treat it as an explicit live-send request.
-Run the repository command that performs the built-in DingTalk delivery flow.
-Do not rewrite that trigger into a dry-run summary-only path.
-After the live run, the AI may report success or failure in chat, but the project remains responsible for the actual DingTalk file delivery.
-When `--notify-user-id <sender_id>` is present, the repository will override its default recipient list and send only to that current asker.
-
-## Scope And Upload Behavior
-
-- `all` creates the Libraton main report and matching store reports.
-- `us`, `ca`, `jp`, and `eu` create only their Libraton scoped report.
-- `ezarc` and `yplus` create a brand main report and matching store reports; `ezarc-test` and `yplus-test` do the same with test-labelled reports.
-- `--upload-only` uploads reports to DingPan but sends no DingTalk messages. Use it without `--dry-run`.
-- With `--notify-user-id`, main-report scopes send only the main report and skip store-report delivery.
-
-## Failure Handling
-
-- Do not silently switch from dry-run to live send, or from live send to dry-run.
-- Do not use scheduler mode from this skill unless the user explicitly asks to manage scheduled execution.
-- Surface missing env vars clearly.
-- When the user explicitly requests a live project run, let the project send files directly through DingTalk.
-- If Python dependencies are missing, tell the user which install step is needed.
-- If Lingxing or Listing requests hit rate limits, tell the user whether the project retried automatically and whether the run ultimately succeeded or failed.
-
-## Reference
-
-For configuration details and command examples, read `references/config.md`.
+- Do not silently switch dry-run ↔ live.
+- Missing env / token: say what is missing.
+- Weekly broadcast stays on `--schedule` cron; chat triggers use `mode=self` only.

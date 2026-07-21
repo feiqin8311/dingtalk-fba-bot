@@ -236,3 +236,40 @@ C级提醒满足：
 ```
 
 如果走 `docker compose up -d --build`，优先使用容器内调度，不需要再叠加宿主机 `cron`。
+
+## HTTP API（YidaLab 调用）
+
+**一个进程**：`--schedule` 同时跑周一定时 + HTTP API（默认监听 `FBA_ALERT_API_PORT`，默认 8090）。
+不需要单独 API 容器。仅调试可再跑 `python -m fba_alert.api_server`；生产用 compose 一个 `fba-alert` 即可。
+
+```bash
+export FBA_ALERT_API_TOKEN=change-me
+# 本地一体
+python -m fba_alert.main --schedule
+
+# 或 compose（一个服务）
+docker compose up -d fba-alert
+```
+
+关闭 API 但保留定时：`python -m fba_alert.main --schedule --no-api`
+
+```http
+POST /v1/alerts/run
+Authorization: Bearer <FBA_ALERT_API_TOKEN>
+Content-Type: application/json
+
+{
+  "scope": "us",
+  "mode": "self",
+  "notify_user_ids": ["钉钉userId"]
+}
+```
+
+`mode`：`self`（只发给 notify_user_ids，YidaLab 人触发）| `broadcast`（矩阵 fan-out，慎用）| `dry_run` | `upload_only`。
+
+```http
+GET /v1/alerts/jobs/{job_id}
+Authorization: Bearer <FBA_ALERT_API_TOKEN>
+```
+
+YidaLab 侧配置 `FBA_ALERT_API_URL` + `FBA_ALERT_API_TOKEN`，身份由服务端注入（钉钉会话=sender；Web=频道高级设置 Owner），不要让模型传 userId。
