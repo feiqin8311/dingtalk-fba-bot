@@ -261,16 +261,35 @@ Content-Type: application/json
 
 {
   "scope": "us",
-  "mode": "self",
-  "notify_user_ids": ["钉钉userId"]
+  "mode": "upload_only"
 }
 ```
 
-`mode`：`self`（只发给 notify_user_ids，YidaLab 人触发）| `broadcast`（矩阵 fan-out，慎用）| `dry_run` | `upload_only`。
+`mode`：
+
+| mode | 钉盘 | 钉钉私信 | 典型调用方 |
+|------|------|----------|------------|
+| **`upload_only`** | 上传 | **不发** | **YidaLab 对话/Web（默认）**；job result 含 `preview_url` |
+| `self` | 上传 | 只发给 `notify_user_ids`（必填） | 需要机器人私信时 |
+| `broadcast` | 上传 | 店铺矩阵 fan-out | 慎用 |
+| `dry_run` | 不上传 | 不发 | 调试 |
+
+Job `result` 示例（done）：
+
+```json
+{
+  "fetched_count": 100,
+  "alert_count": 3,
+  "report_path": "reports/2026-07-24/....xlsx",
+  "sid_distribution": {},
+  "preview_url": "https://qr.dingtalk.com/page/yunpan?route=previewDentry&spaceId=...&fileId=...",
+  "preview_urls": { "...xlsx": "https://qr.dingtalk.com/..." }
+}
+```
 
 ```http
 GET /v1/alerts/jobs/{job_id}
 Authorization: Bearer <FBA_ALERT_API_TOKEN>
 ```
 
-YidaLab 侧配置 `FBA_ALERT_API_URL` + `FBA_ALERT_API_TOKEN`，身份由服务端注入（钉钉会话=sender；Web=频道高级设置 Owner），不要让模型传 userId。
+YidaLab 侧配置 `FBA_ALERT_API_URL` + `FBA_ALERT_API_TOKEN`。聊天路径用 `upload_only`，在对话里展示 `preview_url`（与钉盘交付一致），不要默认发机器人私信。

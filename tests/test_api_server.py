@@ -36,6 +36,12 @@ class ParseRunBodyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _parse_run_body({"scope": "mars", "mode": "dry_run"})
 
+    def test_upload_only_does_not_require_notify_user_ids(self) -> None:
+        scope, mode, ids = _parse_run_body({"scope": "ezarc", "mode": "upload_only"})
+        self.assertEqual(scope, "ezarc")
+        self.assertEqual(mode, AlertMode.UPLOAD_ONLY)
+        self.assertEqual(ids, [])
+
 
 class ApiServerTests(AioHTTPTestCase):
     async def get_application(self):
@@ -71,6 +77,8 @@ class ApiServerTests(AioHTTPTestCase):
             alert_count=2,
             report_path="reports/x.xlsx",
             sid_distribution={"1": 10},
+            preview_url="https://qr.dingtalk.com/page/yunpan?fileId=f1",
+            preview_urls={"reports/x.xlsx": "https://qr.dingtalk.com/page/yunpan?fileId=f1"},
         )
 
         with patch("fba_alert.api_server.load_runtime_config") as load_cfg, patch(
@@ -114,6 +122,10 @@ class ApiServerTests(AioHTTPTestCase):
             assert job is not None
             self.assertEqual(job.status, "done")
             self.assertEqual(job.result["alert_count"], 2)
+            self.assertEqual(
+                job.result["preview_url"],
+                "https://qr.dingtalk.com/page/yunpan?fileId=f1",
+            )
 
             get_resp = await self.client.request(
                 "GET",
@@ -123,6 +135,10 @@ class ApiServerTests(AioHTTPTestCase):
             self.assertEqual(get_resp.status, 200)
             get_body = await get_resp.json()
             self.assertEqual(get_body["status"], "done")
+            self.assertEqual(
+                get_body["result"]["preview_url"],
+                "https://qr.dingtalk.com/page/yunpan?fileId=f1",
+            )
 
             # self mode must pass override user ids into run_alert_job
             kwargs = run_job.await_args.kwargs

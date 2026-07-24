@@ -61,6 +61,10 @@ class AlertJobResult:
     alert_count: int
     report_path: str
     sid_distribution: dict[str, int]
+    # Dingpan preview link for the main report (YidaLab / upload_only consumers).
+    preview_url: str = ""
+    # path -> preview url for main + store reports when uploaded.
+    preview_urls: dict[str, str] | None = None
 
 
 def count_sid_asin_pairs(sid_asin_map: dict[str, set[str]]) -> int:
@@ -882,11 +886,16 @@ async def run_alert_job(
                 title=f"LIBRATON 库存预警 - {report_group_name}",
             )
         print(f"[perf] total_run_seconds={time.perf_counter() - started_at:.2f}")
+        main_preview = preview_url_map.get(report_path, "") if report_path else ""
+        if not main_preview and preview_url_map:
+            main_preview = next(iter(preview_url_map.values()), "")
         return AlertJobResult(
             fetched_count=len(raw_items),
             alert_count=len(alerts),
             report_path=report_path,
             sid_distribution=sid_distribution,
+            preview_url=main_preview,
+            preview_urls=dict(preview_url_map),
         )
     except Exception as exc:
         print(f"[error] run_alert_job_failed error={exc!r}")

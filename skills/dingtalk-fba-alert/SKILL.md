@@ -1,13 +1,13 @@
 ---
 name: dingtalk-fba-alert
-description: Company FBA inventory alert via this repo's HTTP API (or CLI). Fixed phrases LIBRATON/EZARC/YPLUS 库存预警; personal notify by userId. YidaLab uses HTTP mode=self — not shell scripts.
+description: Company FBA inventory alert via this repo's HTTP API (or CLI). Fixed phrases LIBRATON/EZARC/YPLUS 库存预警. YidaLab chat uses mode=upload_only and shows result.preview_url (no DingTalk robot notify).
 ---
 
 # Dingtalk FBA Alert
 
 Business logic lives in this repository (`fba_alert/`). Agents should **not** reimplement it.
 
-## Preferred path (YidaLab)
+## Preferred path (YidaLab chat / Web)
 
 YidaLab calls the **HTTP API** on the same process as the weekly scheduler:
 
@@ -18,10 +18,11 @@ python -m fba_alert.main --schedule   # cron + :8090 API
 ```http
 POST /v1/alerts/run
 Authorization: Bearer <FBA_ALERT_API_TOKEN>
-{ "scope": "all", "mode": "self", "notify_user_ids": ["<dingtalk-user-id>"] }
+{ "scope": "all", "mode": "upload_only" }
 ```
 
-- `mode=self` + `notify_user_ids`: only that person (YidaLab injects sender / channel Owner).
+- **`mode=upload_only` (YidaLab default)**: generate Excel → upload 钉盘 → **no** robot message. Job result includes `preview_url` for the chat UI (same idea as dingpan delivery).
+- **`mode=self` + `notify_user_ids`**: still available when you want DingTalk private notify (not the default YidaLab chat path).
 - Do **not** shell into this repo or use deleted `scripts/` wrappers from agents.
 - See repository README «HTTP API».
 
@@ -55,4 +56,4 @@ Requires `.env` at repo root (`LINGXING_*`, `DINGTALK_*`, and for API `FBA_ALERT
 
 - Do not silently switch dry-run ↔ live.
 - Missing env / token: say what is missing.
-- Weekly broadcast stays on `--schedule` cron; chat triggers use `mode=self` only.
+- Weekly broadcast stays on `--schedule` cron; YidaLab chat triggers use `mode=upload_only` + `preview_url`.

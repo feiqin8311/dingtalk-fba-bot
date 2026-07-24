@@ -102,11 +102,15 @@ class JobStore:
 
 
 def _result_to_dict(result: AlertJobResult) -> dict[str, Any]:
+    preview_urls = result.preview_urls or {}
     return {
         "fetched_count": result.fetched_count,
         "alert_count": result.alert_count,
         "report_path": result.report_path,
         "sid_distribution": result.sid_distribution,
+        # Same shape as YidaLab dingpan delivery so callers can show the link in chat.
+        "preview_url": result.preview_url or "",
+        "preview_urls": preview_urls,
     }
 
 
