@@ -758,6 +758,8 @@ async def run_alert_job(
                 alert_count=0,
                 report_path="",
                 sid_distribution=sid_distribution,
+                preview_url="",
+                preview_urls={},
             )
 
         print("[main] 生成 Excel 报表")

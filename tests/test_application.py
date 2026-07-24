@@ -589,6 +589,8 @@ class ApplicationTests(unittest.TestCase):
                 alert_count=0,
                 report_path="",
                 sid_distribution={},
+                preview_url="",
+                preview_urls={},
             ),
         )
 
