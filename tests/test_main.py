@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, patch
 
 
 class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
-    async def test_scheduler_runs_all_brands_in_order_every_monday(self) -> None:
+    async def test_scheduler_runs_all_brands_in_order_on_monday(self) -> None:
         from fba_alert import main as main_module
 
         args = argparse.Namespace(
             env_file=".env",
             dry_run=False,
-            today="",
+            today="2026-07-27",
             schedule=True,
             scope="all",
             no_api=False,
@@ -22,7 +22,7 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
             upload_only=False,
         )
         captured: list[tuple[object, dict[str, object]]] = []
-        scopes: list[str] = []
+        scheduled_args: list[argparse.Namespace] = []
         api_started: list[tuple[str, str, int]] = []
 
         class FakeScheduler:
@@ -37,7 +37,7 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
                 return None
 
         async def fake_run_once(scoped_args: argparse.Namespace) -> int:
-            scopes.append(scoped_args.scope)
+            scheduled_args.append(scoped_args)
             return 0
 
         async def fake_start_http_api(env_file: str, host: str, port: int):
@@ -60,15 +60,32 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
             await captured[0][0]()
 
         self.assertEqual(result, 0)
-        self.assertEqual(scopes, ["all", "ezarc", "yplus"])
+        self.assertEqual([item.scope for item in scheduled_args], ["all", "ezarc", "yplus"])
+        self.assertTrue(all(not item.upload_only for item in scheduled_args))
         self.assertEqual(len(captured), 1)
         self.assertEqual(api_started, [(".env", "0.0.0.0", 8090)])
         _, kwargs = captured[0]
         self.assertEqual(kwargs["trigger"], "cron")
-        self.assertEqual(kwargs["day_of_week"], "mon")
+        self.assertEqual(kwargs["day_of_week"], "mon-fri")
         self.assertEqual(kwargs["hour"], 9)
         self.assertEqual(kwargs["minute"], 0)
-        self.assertEqual(kwargs["id"], "weekly_stock_alerts")
+        self.assertEqual(kwargs["id"], "weekday_stock_alerts")
+
+    async def test_scheduled_alerts_upload_only_after_monday(self) -> None:
+        from fba_alert import main as main_module
+
+        args = argparse.Namespace(today="2026-07-28", upload_only=False)
+        scheduled_args: list[argparse.Namespace] = []
+
+        async def fake_run_once(scoped_args: argparse.Namespace) -> int:
+            scheduled_args.append(scoped_args)
+            return 0
+
+        with patch.object(main_module, "run_once", new=fake_run_once):
+            await main_module.run_scheduled_alerts(args)
+
+        self.assertEqual([item.scope for item in scheduled_args], ["all", "ezarc", "yplus"])
+        self.assertTrue(all(item.upload_only for item in scheduled_args))
 
     async def test_scheduler_skips_api_when_no_api(self) -> None:
         from fba_alert import main as main_module

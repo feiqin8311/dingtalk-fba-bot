@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--schedule",
         action="store_true",
-        help="常驻运行：每周一 09:00 自动执行，并在同一进程监听 HTTP API",
+        help="常驻运行：工作日 09:00 自动执行；仅周一发送钉钉消息，并在同一进程监听 HTTP API",
     )
     parser.add_argument(
         "--no-api",
@@ -86,8 +86,9 @@ async def run_once(args: argparse.Namespace) -> int:
 
 
 async def run_scheduled_alerts(args: argparse.Namespace) -> None:
+    upload_only = args.upload_only or resolve_today(args.today).weekday() != 0
     for scope in ("all", "ezarc", "yplus"):
-        await run_once(argparse.Namespace(**{**vars(args), "scope": scope}))
+        await run_once(argparse.Namespace(**{**vars(args), "scope": scope, "upload_only": upload_only}))
 
 
 async def start_http_api(env_file: str, host: str, port: int) -> web.AppRunner:
@@ -112,16 +113,16 @@ async def scheduler_main(args: argparse.Namespace) -> int:
     scheduler.add_job(
         partial(run_scheduled_alerts, args),
         trigger="cron",
-        day_of_week="mon",
+        day_of_week="mon-fri",
         hour=9,
         minute=0,
-        id="weekly_stock_alerts",
+        id="weekday_stock_alerts",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
     )
     scheduler.start()
-    print(f"[scheduler] 已启动，每周一 09:00 依次执行 Libraton/EZARC/YPLUS，时区={config.timezone}")
+    print(f"[scheduler] 已启动，工作日 09:00 依次执行 Libraton/EZARC/YPLUS；仅周一发送钉钉消息，时区={config.timezone}")
 
     api_runner: web.AppRunner | None = None
     if not args.no_api:

@@ -143,7 +143,7 @@ docker exec -it dingtalk-fba-bot python -m fba_alert.main
 
 ### 3. 服务器定时执行
 
-如果你已经用 `docker compose up -d --build` 启动了容器，就不需要再额外配宿主机 `cron`，容器会自己按每周一 09:00 执行。
+如果你已经用 `docker compose up -d --build` 启动了容器，就不需要再额外配宿主机 `cron`：容器会在工作日 09:00 执行，周一上传并发送钉钉消息，周二至周五只上传钉盘。
 
 如果你不想让容器常驻，也可以继续使用宿主机 `cron` 定时拉起一次容器：
 
@@ -229,17 +229,18 @@ C级提醒满足：
 
 ## 定时执行
 
-服务器上建议用 `cron` 每周一 09:00 运行：
+服务器上建议使用容器内调度。若使用宿主机 `cron`，周一正常运行，周二至周五使用 `--upload-only`：
 
 ```cron
 0 9 * * 1 cd /path/to/dingtalk-fba-bot && /path/to/conda/env/bin/python -m fba_alert.main >> logs/fba_alert.log 2>&1
+0 9 * * 2-5 cd /path/to/dingtalk-fba-bot && /path/to/conda/env/bin/python -m fba_alert.main --upload-only >> logs/fba_alert.log 2>&1
 ```
 
 如果走 `docker compose up -d --build`，优先使用容器内调度，不需要再叠加宿主机 `cron`。
 
 ## HTTP API（YidaLab 调用）
 
-**一个进程**：`--schedule` 同时跑周一定时 + HTTP API（默认监听 `FBA_ALERT_API_PORT`，默认 8090）。
+**一个进程**：`--schedule` 同时跑工作日定时 + HTTP API（默认监听 `FBA_ALERT_API_PORT`，默认 8090）；周一发送钉钉消息，周二至周五只上传钉盘。
 不需要单独 API 容器。仅调试可再跑 `python -m fba_alert.api_server`；生产用 compose 一个 `fba-alert` 即可。
 
 ```bash

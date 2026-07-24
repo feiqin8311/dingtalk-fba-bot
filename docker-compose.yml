@@ -12,7 +12,7 @@ services:
       - .env
     working_dir: /app
     restart: unless-stopped
-    # One process: weekly cron + HTTP API for YidaLab (see --schedule)
+    # One process: weekday scheduler + HTTP API for YidaLab (see --schedule)
     command: ["python", "-m", "fba_alert.main", "--schedule"]
     ports:
       - "${FBA_ALERT_API_PORT:-8090}:8090"
