@@ -303,7 +303,7 @@ class LingxingClient:
         method: str,
         req_params: Optional[dict] = None,
         req_body: Optional[dict] = None,
-        retries: int = 3,
+        retries: int = 6,
         **kwargs: Any,
     ) -> dict:
         resp: dict = {}
@@ -325,7 +325,13 @@ class LingxingClient:
                 await asyncio.sleep(1)
                 continue
             if (is_rate_limited_response(resp) or is_transient_connection_error_response(resp)) and attempt < retries:
-                await asyncio.sleep(attempt)
+                # 3001008 needs longer backoff than 1–2s; cap at 60s.
+                delay = min(60, 2**attempt)
+                print(
+                    f"[lingxing] rate/transient limited route={route_name} "
+                    f"attempt={attempt}/{retries} sleep={delay}s code={resp.get('code')}"
+                )
+                await asyncio.sleep(delay)
                 continue
             return resp
         return resp
@@ -382,6 +388,8 @@ class LingxingClient:
             print(f"[lingxing] page={page_no} 返回={len(data)} total={total} 累计={len(all_rows)}")
             if len(data) < self.config.page_size:
                 break
+            # Small gap between pages; continuous paging is a common 3001008 trigger.
+            await asyncio.sleep(0.35)
 
         print(f"[lingxing] 补货建议拉取完成: total_rows={len(all_rows)}")
         return all_rows

@@ -55,7 +55,9 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
             main_module, "AsyncIOScheduler", return_value=FakeScheduler()
         ), patch.object(main_module.asyncio, "Event", return_value=FakeEvent()), patch.object(
             main_module, "run_once", new=fake_run_once
-        ), patch.object(main_module, "start_http_api", new=fake_start_http_api):
+        ), patch.object(main_module, "start_http_api", new=fake_start_http_api), patch.object(
+            main_module.asyncio, "sleep", new=AsyncMock()
+        ):
             result = await main_module.scheduler_main(args)
             await captured[0][0]()
 
@@ -81,11 +83,32 @@ class SchedulerMainTests(unittest.IsolatedAsyncioTestCase):
             scheduled_args.append(scoped_args)
             return 0
 
-        with patch.object(main_module, "run_once", new=fake_run_once):
+        with patch.object(main_module, "run_once", new=fake_run_once), patch.object(
+            main_module.asyncio, "sleep", new=AsyncMock()
+        ):
             await main_module.run_scheduled_alerts(args)
 
         self.assertEqual([item.scope for item in scheduled_args], ["all", "ezarc", "yplus"])
         self.assertTrue(all(item.upload_only for item in scheduled_args))
+
+    async def test_scheduled_alerts_continues_after_one_scope_fails(self) -> None:
+        from fba_alert import main as main_module
+
+        args = argparse.Namespace(today="2026-07-28", upload_only=True)
+        scheduled_args: list[str] = []
+
+        async def fake_run_once(scoped_args: argparse.Namespace) -> int:
+            scheduled_args.append(scoped_args.scope)
+            if scoped_args.scope == "all":
+                raise RuntimeError("领星接口返回失败: rate limited")
+            return 0
+
+        with patch.object(main_module, "run_once", new=fake_run_once), patch.object(
+            main_module.asyncio, "sleep", new=AsyncMock()
+        ):
+            await main_module.run_scheduled_alerts(args)
+
+        self.assertEqual(scheduled_args, ["all", "ezarc", "yplus"])
 
     async def test_scheduler_skips_api_when_no_api(self) -> None:
         from fba_alert import main as main_module

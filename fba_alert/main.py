@@ -87,8 +87,16 @@ async def run_once(args: argparse.Namespace) -> int:
 
 async def run_scheduled_alerts(args: argparse.Namespace) -> None:
     upload_only = args.upload_only or resolve_today(args.today).weekday() != 0
-    for scope in ("all", "ezarc", "yplus"):
-        await run_once(argparse.Namespace(**{**vars(args), "scope": scope, "upload_only": upload_only}))
+    scopes = ("all", "ezarc", "yplus")
+    for index, scope in enumerate(scopes):
+        try:
+            await run_once(argparse.Namespace(**{**vars(args), "scope": scope, "upload_only": upload_only}))
+        except Exception as exc:
+            # Keep remaining brands running when one scope dies (e.g. Lingxing 3001008).
+            print(f"[scheduler] scope={scope} failed, continue: {exc!r}")
+        if index < len(scopes) - 1:
+            # Cool down between brands to reduce back-to-back rate limits.
+            await asyncio.sleep(10)
 
 
 async def start_http_api(env_file: str, host: str, port: int) -> web.AppRunner:
