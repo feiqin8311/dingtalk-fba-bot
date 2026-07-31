@@ -5,13 +5,14 @@ from dataclasses import dataclass
 
 
 @dataclass
-class AlertRecord:
-    level: str
-    reasons: list[str]
+class MetricRecord:
+    """FBA 原始指标行（写入 fact_bi_amazon_fba_metric，不含等级）。"""
+
+    brand: str
+    site: str
+    store: str
     asin: str
     sid: str
-    seller_name: str
-    node_type: int
     mskus: list[str]
     listing_contacts: str
     fba_plus_days: int

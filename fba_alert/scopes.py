@@ -5,7 +5,7 @@ from enum import Enum
 
 
 class AlertScope(str, Enum):
-    ALL = "all"
+    LIBRATON = "libraton"
     US = "us"
     CA = "ca"
     JP = "jp"
@@ -17,7 +17,10 @@ class AlertScope(str, Enum):
 
     @classmethod
     def parse(cls, value: str) -> "AlertScope":
-        normalized = (value or cls.ALL.value).strip().lower()
+        normalized = (value or cls.LIBRATON.value).strip().lower()
+        # 兼容旧名 all
+        if normalized == "all":
+            normalized = cls.LIBRATON.value
         try:
             return cls(normalized)
         except ValueError as exc:
@@ -77,13 +80,13 @@ SCOPE_REPORT_GROUP_NAMES = {
 
 
 def resolve_scope_seller_names(scope: AlertScope, seller_map: dict[str, str]) -> set[str]:
-    if scope is AlertScope.ALL:
+    if scope is AlertScope.LIBRATON:
         return set(seller_map.values())
     return set(SCOPE_SELLER_NAMES[scope])
 
 
 def resolve_scope_sid_list(scope: AlertScope, base_sid_list: list[str], seller_map: dict[str, str]) -> list[str]:
-    if scope is AlertScope.ALL:
+    if scope is AlertScope.LIBRATON:
         return list(base_sid_list)
     target_sellers = resolve_scope_seller_names(scope, seller_map)
     resolved = [sid for sid, seller_name in seller_map.items() if seller_name in target_sellers]
@@ -93,6 +96,6 @@ def resolve_scope_sid_list(scope: AlertScope, base_sid_list: list[str], seller_m
 
 
 def resolve_scope_report_group_name(scope: AlertScope) -> str:
-    if scope is AlertScope.ALL:
-        raise ValueError("all scope does not have a scoped report group")
+    if scope is AlertScope.LIBRATON:
+        raise ValueError("libraton scope does not have a scoped report group")
     return SCOPE_REPORT_GROUP_NAMES[scope]

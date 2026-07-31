@@ -3,7 +3,6 @@
 
 from dataclasses import dataclass
 
-from .models import AlertRecord
 from .utils import unique_keep_order
 
 

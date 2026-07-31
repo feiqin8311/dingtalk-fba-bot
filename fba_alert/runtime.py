@@ -15,24 +15,11 @@ def validate_runtime_config(config: AppConfig, dry_run: bool) -> None:
         raise RuntimeError("缺少 LINGXING_SID_LIST")
     if dry_run:
         return
-    print(f"[config] dingtalk_user_count={len(config.dingtalk.user_ids)}")
-    if not config.dingtalk.user_ids:
-        raise RuntimeError("缺少 DINGTALK_USER_IDS，无法发送钉钉消息。")
-    if not config.dingtalk.app_key or not config.dingtalk.app_secret or not config.dingtalk.robot_code:
-        raise RuntimeError("缺少钉钉企业应用配置: DINGTALK_APP_KEY / DINGTALK_APP_SECRET / DINGTALK_ROBOT_CODE")
-    if config.dingtalk.dingpan_enabled:
-        print(
-            f"[config] dingpan_enabled space_id={config.dingtalk.dingpan_space_id} "
-            f"parent_folder_id={config.dingtalk.dingpan_parent_folder_id}"
-        )
-        if not config.dingtalk.dingpan_space_id or not config.dingtalk.dingpan_parent_folder_id:
-            raise RuntimeError(
-                "钉盘上传已启用但缺少 DINGTALK_DINGPAN_SPACE_ID / DINGTALK_DINGPAN_PARENT_FOLDER_ID"
-            )
-        if not config.dingtalk.dingpan_union_id and not config.dingtalk.dingpan_user_id:
-            raise RuntimeError(
-                "钉盘上传已启用但缺少 DINGTALK_DINGPAN_UNION_ID 或 DINGTALK_DINGPAN_USER_ID"
-            )
+    print(
+        f"[config] db={config.db.user}@{config.db.host}:{config.db.port}/{config.db.database}"
+    )
+    if not config.db.host or not config.db.user or not config.db.database:
+        raise RuntimeError("缺少 DB_HOST / DB_USER / DB_NAME，无法写入 fact_bi_amazon_fba_metric")
 
 
 def load_runtime_config(env_file: str, dry_run: bool) -> AppConfig:
